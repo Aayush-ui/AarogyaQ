@@ -1,1 +1,32 @@
-[]
+[
+  {
+    "flag": "ELDERLY_CARDIAC_CRITICAL",
+    "conditions": {"age_gt": 70, "symptoms_include": ["chest_pain"]},
+    "action": "force_priority",
+    "force_to": "Critical"
+  },
+  {
+    "flag": "PEDIATRIC_NEURO_CRITICAL",
+    "conditions": {"age_lt": 5, "symptoms_include": ["loss_of_consciousness"]},
+    "action": "force_priority",
+    "force_to": "Critical"
+  },
+  {
+    "flag": "MAX_PAIN_OVERRIDE",
+    "conditions": {"pain_level_eq": 10},
+    "action": "minimum_priority",
+    "minimum": "High"
+  },
+  {
+    "flag": "PREGNANCY_HIGH_RISK",
+    "conditions": {"symptoms_include": ["pregnancy"], "pain_gte": 6},
+    "action": "force_priority",
+    "force_to": "High"
+  },
+  {
+    "flag": "ANAPHYLAXIS_IMMEDIATE",
+    "conditions": {"symptoms_include": ["allergic_reaction_severe"]},
+    "action": "force_priority",
+    "force_to": "Critical"
+  }
+]

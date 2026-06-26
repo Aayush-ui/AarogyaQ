@@ -1,1 +1,58 @@
-[]
+[
+  {
+    "name": "Emergency",
+    "symptom_keywords": [
+      "chest_pain",
+      "difficulty_breathing",
+      "loss_of_consciousness"
+    ]
+  },
+  {
+    "name": "Cardiology",
+    "symptom_keywords": [
+      "chest_pain",
+      "heart_disease_history",
+      "hypertension_history"
+    ]
+  },
+  {
+    "name": "Neurology",
+    "symptom_keywords": [
+      "stroke_symptoms",
+      "seizure",
+      "loss_of_consciousness",
+      "altered_mental_status"
+    ]
+  },
+  {
+    "name": "Orthopedics",
+    "symptom_keywords": [
+      "joint_pain",
+      "back_pain",
+      "head_injury"
+    ]
+  },
+  {
+    "name": "Pediatrics",
+    "symptom_keywords": []
+  },
+  {
+    "name": "Gynecology",
+    "symptom_keywords": [
+      "pregnancy",
+      "abdominal_pain"
+    ]
+  },
+  {
+    "name": "ENT",
+    "symptom_keywords": [
+      "ear_pain",
+      "sore_throat",
+      "eye_irritation"
+    ]
+  },
+  {
+    "name": "General OPD",
+    "symptom_keywords": []
+  }
+]

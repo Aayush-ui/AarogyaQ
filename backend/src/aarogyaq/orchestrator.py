@@ -16,7 +16,9 @@ from aarogyaq.ai_symptom import map_symptoms
 from aarogyaq.audit import log_event
 from aarogyaq.models import TriageResult, VisitCreate
 from aarogyaq.patient_intake import get_patient
-from aarogyaq.rule_engine import evaluate_risk
+from aarogyaq.rule_engine import (
+    load_clinical_rules, load_business_rules, evaluate_rules, apply_business_rules
+)
 from aarogyaq.summary_gen import generate_summary
 from sqlalchemy.orm import Session
 
@@ -41,29 +43,56 @@ def triage_new_visit(
     db.add(visit)
     db.flush()
     
-    mapping = map_symptoms(visit.chief_complaint, use_ai)
+    mapped_symptoms, confidence_scores, flagged_low_confidence = map_symptoms(visit.chief_complaint, use_ai)
     
-    eval_res = evaluate_risk(
+    clinical_rules = load_clinical_rules()
+    business_rules = load_business_rules()
+    
+    score, fired_rules, factors = evaluate_rules(
+        mapped_symptoms=mapped_symptoms,
         pain_level=visit.pain_level,
-        symptom_duration=visit.symptom_duration,
+        age=patient.age,
         existing_conditions=visit_data.existing_conditions,
-        mapped_symptoms=mapping.mapped_symptoms,
-        queue_type=visit.queue_type,
+        rules=clinical_rules
+    )
+    
+    from aarogyaq.priority import classify
+    base_priority = classify(score)
+            
+    final_priority, b_flags = apply_business_rules(
+        base_priority=base_priority,
+        mapped_symptoms=mapped_symptoms,
+        pain_level=visit.pain_level,
+        age=patient.age,
+        business_rules=business_rules
     )
     
     assessment = Assessment(
         visit_id=visit.visit_id,
         raw_symptoms=visit.chief_complaint,
-        mapped_symptoms=json.dumps(mapping.mapped_symptoms),
-        confidence_scores=json.dumps(mapping.confidence_scores),
-        priority_level=eval_res.priority_level,
-        risk_score=eval_res.risk_score,
-        score_breakdown=json.dumps(eval_res.score_breakdown),
-        contributing_factors=json.dumps(eval_res.contributing_factors),
-        business_rule_flags=json.dumps(eval_res.business_rule_flags),
+        mapped_symptoms=json.dumps(mapped_symptoms),
+        confidence_scores=json.dumps(confidence_scores),
+        priority_level=final_priority,
+        risk_score=score,
+        score_breakdown=json.dumps(fired_rules),
+        contributing_factors=json.dumps(factors),
+        business_rule_flags=json.dumps(b_flags),
         is_reassessment=False
     )
     db.add(assessment)
+    db.flush()
+    
+    from aarogyaq.queue_manager import assign_queue
+    assign_queue(db, visit.visit_id, final_priority)
+    
+    from aarogyaq.department import route_department
+    routed_dept, _ = route_department(
+        mapped_symptoms=mapped_symptoms,
+        priority_level=final_priority,
+        age=patient.age,
+        db=db
+    )
+    visit.department_assigned = routed_dept
     db.flush()
     
     summary_text = generate_summary(
@@ -71,14 +100,12 @@ def triage_new_visit(
         age=patient.age,
         gender=patient.gender,
         chief_complaint=visit.chief_complaint,
+        mapped_symptoms=mapped_symptoms,
         pain_level=visit.pain_level,
-        symptom_duration=visit.symptom_duration,
         existing_conditions=visit_data.existing_conditions,
-        mapped_symptoms=mapping.mapped_symptoms,
-        risk_score=eval_res.risk_score,
-        priority_level=eval_res.priority_level,
-        contributing_factors=eval_res.contributing_factors,
-        business_rule_flags=eval_res.business_rule_flags,
+        priority_level=final_priority,
+        contributing_factors=factors,
+        department_assigned=routed_dept,
         use_ai=use_ai,
     )
     
@@ -89,7 +116,7 @@ def triage_new_visit(
     db.add(summary)
     db.flush()
     
-    log_event(db, actor="system", action="ASSESSED", visit_id=visit.visit_id, notes=f"Score: {eval_res.risk_score}")
+    log_event(db, actor="system", action="ASSESSED", visit_id=visit.visit_id, notes=f"Score: {score}")
     
     return TriageResult(
         patient=PatientOut(
@@ -105,10 +132,10 @@ def triage_new_visit(
         ),
         assessment=AssessmentOut(
             assessment_id=assessment.assessment_id, visit_id=assessment.visit_id, raw_symptoms=assessment.raw_symptoms,
-            mapped_symptoms=mapping.mapped_symptoms, confidence_scores=mapping.confidence_scores,
+            mapped_symptoms=mapped_symptoms, confidence_scores=confidence_scores,
             risk_score=assessment.risk_score, priority_level=assessment.priority_level,
-            score_breakdown=eval_res.score_breakdown, contributing_factors=eval_res.contributing_factors,
-            business_rule_flags=eval_res.business_rule_flags, assessed_at=assessment.assessed_at,
+            score_breakdown=fired_rules, contributing_factors=factors,
+            business_rule_flags=b_flags, assessed_at=assessment.assessed_at,
             is_reassessment=assessment.is_reassessment
         ),
         summary=SummaryOut(
@@ -134,29 +161,56 @@ def reassess_visit(
     from aarogyaq.models import to_list
     existing_conditions = to_list(visit.existing_conditions)
     
-    mapping = map_symptoms(complaint, use_ai)
+    mapped_symptoms, confidence_scores, flagged_low_confidence = map_symptoms(complaint, use_ai)
     
-    eval_res = evaluate_risk(
+    clinical_rules = load_clinical_rules()
+    business_rules = load_business_rules()
+    
+    score, fired_rules, factors = evaluate_rules(
+        mapped_symptoms=mapped_symptoms,
         pain_level=visit.pain_level,
-        symptom_duration=visit.symptom_duration,
+        age=patient.age,
         existing_conditions=existing_conditions,
-        mapped_symptoms=mapping.mapped_symptoms,
-        queue_type=visit.queue_type,
+        rules=clinical_rules
+    )
+    
+    from aarogyaq.priority import classify
+    base_priority = classify(score)
+            
+    final_priority, b_flags = apply_business_rules(
+        base_priority=base_priority,
+        mapped_symptoms=mapped_symptoms,
+        pain_level=visit.pain_level,
+        age=patient.age,
+        business_rules=business_rules
     )
     
     assessment = Assessment(
         visit_id=visit.visit_id,
         raw_symptoms=complaint,
-        mapped_symptoms=json.dumps(mapping.mapped_symptoms),
-        confidence_scores=json.dumps(mapping.confidence_scores),
-        priority_level=eval_res.priority_level,
-        risk_score=eval_res.risk_score,
-        score_breakdown=json.dumps(eval_res.score_breakdown),
-        contributing_factors=json.dumps(eval_res.contributing_factors),
-        business_rule_flags=json.dumps(eval_res.business_rule_flags),
+        mapped_symptoms=json.dumps(mapped_symptoms),
+        confidence_scores=json.dumps(confidence_scores),
+        priority_level=final_priority,
+        risk_score=score,
+        score_breakdown=json.dumps(fired_rules),
+        contributing_factors=json.dumps(factors),
+        business_rule_flags=json.dumps(b_flags),
         is_reassessment=True
     )
     db.add(assessment)
+    db.flush()
+    
+    from aarogyaq.queue_manager import assign_queue
+    assign_queue(db, visit.visit_id, final_priority)
+    
+    from aarogyaq.department import route_department
+    routed_dept, _ = route_department(
+        mapped_symptoms=mapped_symptoms,
+        priority_level=final_priority,
+        age=patient.age,
+        db=db
+    )
+    visit.department_assigned = routed_dept
     db.flush()
     
     summary_text = generate_summary(
@@ -164,14 +218,12 @@ def reassess_visit(
         age=patient.age,
         gender=patient.gender,
         chief_complaint=complaint,
+        mapped_symptoms=mapped_symptoms,
         pain_level=visit.pain_level,
-        symptom_duration=visit.symptom_duration,
         existing_conditions=existing_conditions,
-        mapped_symptoms=mapping.mapped_symptoms,
-        risk_score=eval_res.risk_score,
-        priority_level=eval_res.priority_level,
-        contributing_factors=eval_res.contributing_factors,
-        business_rule_flags=eval_res.business_rule_flags,
+        priority_level=final_priority,
+        contributing_factors=factors,
+        department_assigned=routed_dept,
         use_ai=use_ai,
     )
     
@@ -187,7 +239,7 @@ def reassess_visit(
         db.add(summary)
     
     db.flush()
-    log_event(db, actor="system", action="REASSESSED", visit_id=visit.visit_id, notes=f"Score: {eval_res.risk_score}")
+    log_event(db, actor="system", action="REASSESSED", visit_id=visit.visit_id, notes=f"Score: {score}")
     
     return TriageResult(
         patient=PatientOut(
@@ -203,10 +255,10 @@ def reassess_visit(
         ),
         assessment=AssessmentOut(
             assessment_id=assessment.assessment_id, visit_id=assessment.visit_id, raw_symptoms=assessment.raw_symptoms,
-            mapped_symptoms=mapping.mapped_symptoms, confidence_scores=mapping.confidence_scores,
+            mapped_symptoms=mapped_symptoms, confidence_scores=confidence_scores,
             risk_score=assessment.risk_score, priority_level=assessment.priority_level,
-            score_breakdown=eval_res.score_breakdown, contributing_factors=eval_res.contributing_factors,
-            business_rule_flags=eval_res.business_rule_flags, assessed_at=assessment.assessed_at,
+            score_breakdown=fired_rules, contributing_factors=factors,
+            business_rule_flags=b_flags, assessed_at=assessment.assessed_at,
             is_reassessment=assessment.is_reassessment
         ),
         summary=SummaryOut(

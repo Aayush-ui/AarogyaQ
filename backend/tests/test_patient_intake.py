@@ -11,53 +11,55 @@ from aarogyaq.patient_intake import (
 )
 
 
-from aarogyaq.models import PatientCreate, Patient
+from aarogyaq.models import PatientCreate, Patient, AuditLog
 
 def test_register_patient_valid_case(test_db):
-    """Registering a patient with valid data returns an ARQ-format ID."""
-    data = PatientCreate(name="John Doe", age=30, gender="Male", phone="1234567890")
-    patient = register_patient(test_db, data)
-    assert patient.patient_id.startswith("ARQ-")
-    assert patient.name == "John Doe"
+    """Valid registration: assert patient_id format ARQ-000001, visit.status == 'Waiting'"""
+    patient, visit = register_patient(
+        test_db, "John", 30, "Male", "123", "Pain", 5, 10, []
+    )
+    assert patient.patient_id == "ARQ-000001"
+    assert visit.status == "Waiting"
+
+def test_register_patient_invalid_age(test_db):
+    """Invalid age (200): assert ValueError raised"""
+    with pytest.raises(ValueError, match="Age must be between 0 and 120"):
+        register_patient(
+            test_db, "John", 200, "Male", "123", "Pain", 5, 10, []
+        )
+
+def test_register_patient_invalid_pain_level(test_db):
+    """Invalid pain_level (0): assert ValueError raised"""
+    with pytest.raises(ValueError, match="Pain level must be between 1 and 10"):
+        register_patient(
+            test_db, "John", 30, "Male", "123", "Pain", 0, 10, []
+        )
+
+def test_register_patient_empty_complaint(test_db):
+    """Empty chief_complaint: assert ValueError raised"""
+    with pytest.raises(ValueError, match="Chief complaint must not be empty"):
+        register_patient(
+            test_db, "John", 30, "Male", "123", "   ", 5, 10, []
+        )
+
+def test_register_patient_reused_phone(test_db):
+    """Second registration with same phone: assert same patient_id reused, new visit created"""
+    patient1, visit1 = register_patient(
+        test_db, "John", 30, "Male", "12345", "Pain", 5, 10, []
+    )
+    patient2, visit2 = register_patient(
+        test_db, "John", 30, "Male", "12345", "Fever", 2, 20, []
+    )
+    assert patient1.patient_id == patient2.patient_id
+    assert visit1.visit_id != visit2.visit_id
     assert test_db.query(Patient).count() == 1
 
-
-def test_get_patient_missing_raises_keyerror_invalid_case(test_db):
-    """get_patient raises KeyError when the ID does not exist."""
-    with pytest.raises(KeyError):
-        get_patient(test_db, "ARQ-999")
-
-
-def test_find_patients_by_phone_partial_match_edge(test_db):
-    """find_patients_by_phone returns a list of matching PatientOut objects."""
-    p1 = PatientCreate(name="John", age=30, gender="Male", phone="12345")
-    p2 = PatientCreate(name="Jane", age=30, gender="Female", phone="12345")
-    register_patient(test_db, p1)
-    register_patient(test_db, p2)
-    
-    matches = find_patients_by_phone(test_db, "12345")
-    assert len(matches) == 2
-
-
-def test_generate_patient_id_sequential_edge(test_db):
-    """generate_patient_id() returns sequential zero-padded ARQ IDs."""
-    id1 = generate_patient_id(test_db)
-    assert id1 == "ARQ-000001"
-    
-    # insert a patient to increment count
-    data = PatientCreate(name="Jane", age=25, gender="Female")
-    register_patient(test_db, data)
-    
-    id2 = generate_patient_id(test_db)
-    assert id2 == "ARQ-000002"
-
-def test_find_patients_by_phone(test_db):
-    data = PatientCreate(name="Jane", age=25, gender="Female", phone="555-1234")
-    register_patient(test_db, data)
-    
-    patients = find_patients_by_phone(test_db, "555-1234")
-    assert len(patients) == 1
-    assert patients[0].name == "Jane"
-    
-    with pytest.raises(ValueError):
-        find_patients_by_phone(test_db, "")
+def test_register_patient_audit_log(test_db):
+    """AuditLog entry exists after registration"""
+    patient, visit = register_patient(
+        test_db, "John", 30, "Male", "123", "Pain", 5, 10, []
+    )
+    log = test_db.query(AuditLog).filter(AuditLog.visit_id == visit.visit_id).first()
+    assert log is not None
+    assert log.actor == "nurse"
+    assert log.action == "REGISTERED"

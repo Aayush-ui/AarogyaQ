@@ -7,6 +7,8 @@ or service modules.  No business logic lives here.
 """
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, FastAPI, status, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -36,9 +38,8 @@ from aarogyaq.patient_intake import (
     register_patient,
 )
 from aarogyaq.queue_manager import (
-    get_active_queue,
-    mark_attending,
-    mark_completed,
+    get_emergency_queue,
+    get_general_queue,
     update_visit_status,
 )
 from aarogyaq.audit import get_audit_trail
@@ -74,7 +75,17 @@ async def health_check() -> dict[str, str]:
 async def create_patient(data: PatientCreate, db: Session = Depends(get_db)) -> Any:
     """Register a new patient and return their record."""
     try:
-        p = register_patient(db, data)
+        p, v = register_patient(
+            db,
+            name=data.name,
+            age=data.age,
+            gender=data.gender,
+            phone=data.phone,
+            chief_complaint="Patient registered directly",
+            pain_level=1,
+            symptom_duration=None,
+            existing_conditions=[]
+        )
         return p
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -185,7 +196,13 @@ async def update_status(
 @router.get("/queue", tags=["queue"])
 async def get_queue(queue_type: str | None = None, db: Session = Depends(get_db)) -> Any:
     """Return the live sorted patient queue."""
-    return get_active_queue(db, queue_type)
+    if queue_type == "Emergency":
+        return get_emergency_queue(db)
+    elif queue_type == "General":
+        return get_general_queue(db)
+    else:
+        # If no queue_type specified, return both, emergency first
+        return get_emergency_queue(db) + get_general_queue(db)
 
 
 # ── Departments ───────────────────────────────────────────────────────────────

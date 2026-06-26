@@ -12,55 +12,64 @@ from sqlalchemy.orm import Session
 from aarogyaq.models import AuditLog
 
 
-def log_event(
+from datetime import datetime
+from sqlalchemy.orm import Session
+from aarogyaq.models import AuditLog
+
+VALID_ACTORS = frozenset({"nurse", "doctor", "system"})
+VALID_ACTIONS = frozenset({
+    "REGISTERED", "REASSESSED", "QUEUE_ASSIGNED",
+    "STATUS_ATTENDING", "STATUS_COMPLETED",
+    "SUMMARY_GENERATED", "DEPARTMENT_ROUTED",
+    "DEPARTMENT_STATUS_CHANGED", "SYSTEM_ALERT_AGING"
+})
+
+def write_log(
     db: Session,
+    visit_id: int | None,
     actor: str,
     action: str,
-    visit_id: int | None = None,
-    notes: str | None = None,
+    notes: str | None = None
 ) -> AuditLog:
-    """Append a new audit log entry and flush it to the database.
-
-    Args:
-        db: Active database session.
-        actor: Identifier of the acting entity: ``"nurse"``, ``"doctor"``,
-               or ``"system"``.
-        action: Action label (e.g. ``"REGISTERED"``, ``"ASSESSED"``,
-                ``"REASSESSED"``, ``"ROUTED"``, ``"COMPLETED"``).
-        visit_id: Associated visit ID; ``None`` for system-level events not
-                  tied to a specific visit.
-        notes: Optional free-text context for the event.
-
-    Returns:
-        The persisted :class:`AuditLog` ORM instance.
-
-    Raises:
-        ValueError: if *actor* or *action* is an empty string.
     """
-    if not actor or not actor.strip():
-        raise ValueError("actor cannot be empty")
-    if not action or not action.strip():
-        raise ValueError("action cannot be empty")
+    Write one audit log entry. Returns the created AuditLog ORM object.
+    Raises ValueError if actor not in VALID_ACTORS or action not in VALID_ACTIONS.
+    visit_id may be None for system-level events not tied to a visit.
+    logged_at = datetime.utcnow() at time of call.
+    """
+    if actor not in VALID_ACTORS:
+        raise ValueError(f"Invalid actor: {actor}")
+    if action not in VALID_ACTIONS:
+        raise ValueError(f"Invalid action: {action}")
         
     log_entry = AuditLog(
-        actor=actor.strip(),
-        action=action.strip(),
+        actor=actor,
+        action=action,
         visit_id=visit_id,
         notes=notes,
+        logged_at=datetime.utcnow()
     )
     db.add(log_entry)
     db.flush()
     return log_entry
 
-
-def get_audit_trail(db: Session, visit_id: int) -> list[AuditLog]:
-    """Retrieve all audit log entries for a visit, ordered by ``logged_at``.
-
-    Args:
-        db: Active database session.
-        visit_id: The visit whose audit trail is requested.
-
-    Returns:
-        Ordered list of :class:`AuditLog` instances (may be empty).
-    """
+def get_logs_for_visit(db: Session, visit_id: int) -> list[AuditLog]:
+    """Return all audit logs for a visit, ordered by logged_at ascending."""
     return db.query(AuditLog).filter(AuditLog.visit_id == visit_id).order_by(AuditLog.logged_at.asc()).all()
+
+# Backwards compatibility wrappers
+def log_event(db, actor, action, visit_id=None, notes=None):
+    # Map old actions to new ones
+    if action == "ASSESSED":
+        action = "SUMMARY_GENERATED"
+    elif action == "ATTENDING":
+        action = "STATUS_ATTENDING"
+    elif action == "COMPLETED":
+        action = "STATUS_COMPLETED"
+    elif action == "ROUTED":
+        action = "DEPARTMENT_ROUTED"
+    
+    return write_log(db, visit_id, actor, action, notes)
+
+def get_audit_trail(db, visit_id):
+    return get_logs_for_visit(db, visit_id)

@@ -12,49 +12,68 @@ from __future__ import annotations
 
 
 import requests
+import logging
+
+logger = logging.getLogger(__name__)
 
 def generate_summary(
     patient_name: str,
     age: int,
     gender: str,
     chief_complaint: str,
-    pain_level: int,
-    symptom_duration: int | None,
-    existing_conditions: list[str],
     mapped_symptoms: list[str],
-    risk_score: float,
+    pain_level: int,
+    existing_conditions: list[str],
     priority_level: str,
     contributing_factors: list[str],
-    business_rule_flags: list[str],
-    use_ai: bool = False,
+    department_assigned: str,
+    use_ai: bool = False
 ) -> str:
-    """Produce a plain-language triage summary for the attending clinician."""
-    if not patient_name.strip() or not gender.strip() or not chief_complaint.strip() or not priority_level.strip():
-        raise ValueError("Required string arguments cannot be empty.")
-
-    duration_str = f" for {symptom_duration} minutes" if symptom_duration is not None else ""
-    cond_str = f" with history of {', '.join(existing_conditions)}" if existing_conditions else " with no known prior conditions"
-    factors_str = f" Key factors: {', '.join(contributing_factors)}." if contributing_factors else ""
-    flags_str = f" Rules applied: {', '.join(business_rule_flags)}." if business_rule_flags else ""
-
+    """
+    Generate a professional doctor-facing summary paragraph.
+    """
+    mapped_str = ", ".join(mapped_symptoms) if mapped_symptoms else "None identified"
+    cond_str = ", ".join(existing_conditions) if existing_conditions else "None reported"
+    factors_str = ", ".join(contributing_factors) if contributing_factors else "None"
+    
     template = (
-        f"{patient_name}, a {age}-year-old {gender}, presented with {chief_complaint}{duration_str}{cond_str}. "
-        f"Pain is {pain_level}/10. Mapped symptoms: {', '.join(mapped_symptoms)}. "
-        f"Calculated risk score is {risk_score} (Priority: {priority_level}).{factors_str}{flags_str}"
+        f"{patient_name}, {age}yr {gender}, presenting with {chief_complaint}. "
+        f"Mapped clinical findings: {mapped_str}. "
+        f"Pain level: {pain_level}/10. "
+        f"Existing conditions: {cond_str}. "
+        f"Priority: {priority_level}. "
+        f"Key risk factors: {factors_str}. "
+        f"Routed to: {department_assigned}."
     )
 
     if use_ai:
+        prompt = (
+            f"SYSTEM: You are a clinical documentation assistant in a hospital "
+            f"emergency department. Write exactly one professional paragraph "
+            f"(3-5 sentences) suitable for a doctor to read in 5 seconds. "
+            f"Use formal clinical language. Do NOT diagnose. Do NOT suggest "
+            f"treatment. Only summarize the provided facts.\n"
+            f"Respond with ONLY the paragraph text. No JSON. No formatting.\n"
+            f"USER: Patient: {patient_name}, Age: {age}, Gender: {gender}\n"
+            f"Chief complaint: {chief_complaint}\n"
+            f"Identified clinical markers: {mapped_str}\n"
+            f"Pain: {pain_level}/10\n"
+            f"Known conditions: {cond_str}\n"
+            f"Triage priority: {priority_level}\n"
+            f"Risk factors identified: {factors_str}\n"
+            f"Assigned department: {department_assigned}"
+        )
         try:
             resp = requests.post("http://localhost:11434/api/generate", json={
-                "model": "llama3.2:1b",
-                "prompt": f"Rewrite the following clinical triage summary to be professional, concise, and clear. Do not add any new medical information or change the meaning. Only return the rewritten text:\n\n{template}",
+                "model": "llama3.1:8b",
+                "prompt": prompt,
                 "stream": False
             }, timeout=3.0)
             if resp.status_code == 200:
                 data = resp.json()
                 if "response" in data and data["response"].strip():
                     return data["response"].strip()
-        except Exception:
-            pass
-            
+        except Exception as e:
+            logger.warning(f"Ollama call failed: {e}. Falling back to template.")
+
     return template

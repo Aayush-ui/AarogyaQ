@@ -10,78 +10,153 @@ deterministic keyword-matching strategy with zero network calls.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-
-
-@dataclass
-class SymptomMappingResult:
-    """Holds the output of a single symptom mapping operation.
-
-    Attributes:
-        mapped_symptoms: Canonical clinical term strings.
-        confidence_scores: Term -> confidence score mapping (0.0–1.0).
-        used_ai: True when the LLM was consulted; False for deterministic path.
-    """
-
-    mapped_symptoms: list[str] = field(default_factory=list)
-    confidence_scores: dict[str, float] = field(default_factory=dict)
-    used_ai: bool = False
-
-
+import json
+import logging
 import requests
 
-def map_symptoms(raw_text: str, use_ai: bool = False) -> SymptomMappingResult:
-    """Map a free-text symptom description to canonical clinical terms.
+logger = logging.getLogger(__name__)
 
-    When ``use_ai=False`` (default) or when Ollama is unreachable, the
-    function applies a deterministic keyword-matching strategy — no network
-    calls, same input always produces identical output.
+VALID_CLINICAL_TERMS = frozenset([
+    "chest_pain", "difficulty_breathing", "loss_of_consciousness",
+    "seizure", "stroke_symptoms", "high_fever", "altered_mental_status",
+    "head_injury", "bleeding_uncontrolled", "allergic_reaction_severe",
+    "abdominal_pain", "vomiting", "dehydration_signs", "pregnancy",
+    "diabetes_history", "heart_disease_history", "hypertension_history",
+    "pain_level_high", "dizziness", "fainting", "back_pain", "joint_pain",
+    "skin_rash", "eye_irritation", "ear_pain", "sore_throat", "cough",
+    "cold_symptoms", "urinary_symptoms", "weakness_general"
+])
 
-    Args:
-        raw_text: Free-text symptom description entered by the nurse.
-        use_ai: If ``True``, attempt Ollama for richer mapping; fall back
-                silently to deterministic logic if Ollama is unavailable.
+OLLAMA_URL = "http://localhost:11434/api/generate"
+OLLAMA_MODEL = "llama3.1:8b"
+CONFIDENCE_THRESHOLD = 0.75
 
-    Returns:
-        A :class:`SymptomMappingResult` with canonical terms and confidence
-        scores.
+SYNONYM_MAP = {
+    "chest tightness": "chest_pain",
+    "can't breathe": "difficulty_breathing",
+    "unconscious": "loss_of_consciousness",
+    "sugar": "diabetes_history",
+    "fit": "seizure",
+    "fits": "seizure",
+    "fainted": "fainting",
+    "breathless": "difficulty_breathing",
+    "bp": "hypertension_history",
+    "heart attack": "chest_pain",
+    "stomach ache": "abdominal_pain",
+    "throwing up": "vomiting",
+    "puking": "vomiting",
+    "dry mouth": "dehydration_signs",
+    "expecting": "pregnancy",
+    "pregnant": "pregnancy",
+    "high blood pressure": "hypertension_history",
+    "dizzy": "dizziness",
+    "passed out": "fainting",
+    "rash": "skin_rash",
+    "itchy skin": "skin_rash",
+    "sore eyes": "eye_irritation",
+    "red eyes": "eye_irritation",
+    "earache": "ear_pain",
+    "throat hurts": "sore_throat",
+    "coughing": "cough",
+    "runny nose": "cold_symptoms",
+    "pee hurts": "urinary_symptoms",
+    "weak": "weakness_general",
+    "tired": "weakness_general",
+    "exhausted": "weakness_general",
+    "fever": "high_fever",
+    "hot": "high_fever",
+    "head hurt": "head_injury",
+    "bleeding": "bleeding_uncontrolled",
+    "allergy": "allergic_reaction_severe",
+    "swollen": "allergic_reaction_severe",
+    "seizures": "seizure"
+}
 
-    Raises:
-        ValueError: if *raw_text* is empty or whitespace-only.
+def map_symptoms(
+    free_text: str,
+    use_ai: bool = False
+) -> tuple[list[str], dict[str, float], list[str]]:
     """
-    if not raw_text or not raw_text.strip():
-        raise ValueError("raw_text cannot be empty")
-        
-    text = raw_text.lower()
-    
-    keyword_map = {
-        "chest pain": "Chest Pain",
-        "headache": "Headache",
-        "fever": "Fever",
-        "cough": "Cough",
-        "dizzy": "Dizziness"
-    }
-    
-    mapped = []
-    scores = {}
-    
-    for kw, canon in keyword_map.items():
-        if kw in text:
-            mapped.append(canon)
-            scores[canon] = 0.8
-            
-    used_ai = False
+    Map nurse's free-text to standardized clinical terms.
+    Returns:
+    (mapped_terms, confidence_scores, flagged_low_confidence)
+    """
+    if not free_text or not free_text.strip():
+        return [], {}, []
+
     if use_ai:
+        terms_csv = ", ".join(VALID_CLINICAL_TERMS)
+        system_prompt = (
+            "You are a clinical triage assistant. Your only job is "
+            "to map patient symptom descriptions to standardized clinical "
+            "terms from a fixed list. Respond ONLY with a valid JSON object. "
+            "No preamble. No explanation. No markdown. Just the JSON."
+        )
+        user_prompt = (
+            f'Patient description: "{free_text}"\n'
+            f'Map to terms from this list only:\n{terms_csv}\n'
+            'Respond with ONLY this JSON structure:\n'
+            '{\n'
+            '  "mapped_terms": ["term1", "term2"],\n'
+            '  "confidence": {"term1": 0.9, "term2": 0.85}\n'
+            '}\n'
+            'Rules:\n'
+            '- Only include terms from the list above.\n'
+            '- Do not invent new terms.\n'
+            '- If no terms match, return {"mapped_terms": [], "confidence": {}}'
+        )
+
         try:
-            r = requests.get("http://localhost:11434/api/version", timeout=1)
-            if r.status_code == 200:
-                used_ai = True
-                # Dummy AI implementation, fallback handles the actual return values for now
-        except Exception:
-            used_ai = False
+            response = requests.post(
+                OLLAMA_URL,
+                json={
+                    "model": OLLAMA_MODEL,
+                    "prompt": f"{system_prompt}\n{user_prompt}",
+                    "stream": False,
+                    "format": "json"
+                },
+                timeout=5
+            )
+            response.raise_for_status()
+            data = response.json()
+            raw_response = data.get("response", "{}")
+            parsed = json.loads(raw_response)
+
+            mapped_terms = [t for t in parsed.get("mapped_terms", []) if t in VALID_CLINICAL_TERMS]
+            confidence_scores = {}
+            flagged = []
             
-    return SymptomMappingResult(
-        mapped_symptoms=mapped,
-        confidence_scores=scores,
-        used_ai=used_ai
-    )
+            raw_conf = parsed.get("confidence", {})
+            for t in mapped_terms:
+                c = float(raw_conf.get(t, 1.0))
+                confidence_scores[t] = c
+                if c < CONFIDENCE_THRESHOLD:
+                    flagged.append(t)
+
+            return mapped_terms, confidence_scores, flagged
+
+        except (requests.RequestException, json.JSONDecodeError) as e:
+            logger.warning(f"Ollama call failed: {e}. Falling back to deterministic mapping.")
+            # Fall through to deterministic mapping
+            pass
+
+    # Deterministic fallback / default path
+    mapped_terms_set = set()
+    text_lower = free_text.lower()
+    
+    # Try exact word matches from valid terms
+    for term in VALID_CLINICAL_TERMS:
+        if term.replace("_", " ") in text_lower:
+            mapped_terms_set.add(term)
+            
+    # Try synonym mapping
+    for syn, canon in SYNONYM_MAP.items():
+        if syn in text_lower:
+            if canon in VALID_CLINICAL_TERMS:
+                mapped_terms_set.add(canon)
+
+    mapped_terms = list(mapped_terms_set)
+    confidence_scores = {t: 1.0 for t in mapped_terms}
+    flagged = []
+
+    return mapped_terms, confidence_scores, flagged

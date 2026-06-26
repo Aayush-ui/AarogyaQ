@@ -7,148 +7,131 @@ lifecycle.  Every status change emits an audit log entry.
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-
 from aarogyaq.models import Visit
-
-
 from aarogyaq.audit import log_event
-from aarogyaq.priority import priority_to_sort_key
+from aarogyaq.priority import QUEUE_ASSIGNMENT
 
-def get_active_queue(
-    db: Session,
-    queue_type: str | None = None,
-) -> list[Visit]:
-    """Return visits in ``Waiting`` or ``Attending`` status, priority-sorted.
+AGING_THRESHOLD_MINUTES = 45
 
-    Ordering: priority ascending (Critical first), then ``visit_timestamp``
-    ascending (longest wait first).
-
-    Args:
-        db: Active database session.
-        queue_type: Optional filter — ``"Emergency"`` or ``"General"``.
-                    Returns all queue types when *None*.
-
-    Returns:
-        Ordered list of :class:`Visit` ORM instances.
-
-    Raises:
-        ValueError: if *queue_type* is not a recognised value.
+def assign_queue(db: Session, visit_id: int, priority_level: str) -> str:
+    """Set visit.queue_type based on priority_level using QUEUE_ASSIGNMENT
+    from priority.py. Persist to DB. Return queue_type string.
+    Write audit log: actor="system", action="QUEUE_ASSIGNED".
     """
-    query = db.query(Visit).filter(Visit.status.in_(["Waiting", "Attending"]))
-    if queue_type is not None:
-        if queue_type not in ["Emergency", "General"]:
-            raise ValueError(f"Unrecognised queue_type: {queue_type}")
-        query = query.filter(Visit.queue_type == queue_type)
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise KeyError(f"Visit {visit_id} not found")
+        
+    if priority_level not in QUEUE_ASSIGNMENT:
+        raise ValueError(f"Unknown priority_level: {priority_level}")
+        
+    queue_type = QUEUE_ASSIGNMENT[priority_level]
+    visit.queue_type = queue_type
+    
+    db.flush()
+    log_event(db, actor="system", action="QUEUE_ASSIGNED", visit_id=visit_id, notes=f"Assigned to {queue_type}")
+    
+    return queue_type
 
-    visits = query.all()
+def get_emergency_queue(db: Session) -> list[Visit]:
+    """Return all Waiting+Attending visits with queue_type="Emergency",
+    ordered by priority (Critical first) then by visit_timestamp
+    ascending (earlier arrivals first within same priority).
+    Priority sort order: Critical=0, High=1, Medium=2, Low=3.
+    """
+    visits = db.query(Visit).filter(
+        Visit.status.in_(["Waiting", "Attending"]),
+        Visit.queue_type == "Emergency"
+    ).all()
+    
+    from aarogyaq.priority import priority_to_sort_key
     
     def sort_key(v: Visit):
-        priority = 4  # Default lowest
+        priority = 3  # Default to Low
         if v.assessments:
             active = max(v.assessments, key=lambda a: a.assessment_id)
-            priority = priority_to_sort_key(active.priority_level)
-        # Using visit_id as secondary tie-breaker if visit_timestamp matches
+            try:
+                priority = priority_to_sort_key(active.priority_level)
+            except ValueError:
+                pass
         return (priority, v.visit_timestamp, v.visit_id)
         
     visits.sort(key=sort_key)
     return visits
 
+def get_general_queue(db: Session) -> list[Visit]:
+    """Same as above but queue_type="General"."""
+    visits = db.query(Visit).filter(
+        Visit.status.in_(["Waiting", "Attending"]),
+        Visit.queue_type == "General"
+    ).all()
+    
+    from aarogyaq.priority import priority_to_sort_key
+    
+    def sort_key(v: Visit):
+        priority = 3  # Default to Low
+        if v.assessments:
+            active = max(v.assessments, key=lambda a: a.assessment_id)
+            try:
+                priority = priority_to_sort_key(active.priority_level)
+            except ValueError:
+                pass
+        return (priority, v.visit_timestamp, v.visit_id)
+        
+    visits.sort(key=sort_key)
+    return visits
+
+def get_stale_patients(db: Session) -> list[Visit]:
+    """Return Waiting visits in General queue where
+    (now - visit_timestamp) > AGING_THRESHOLD_MINUTES.
+    These need a staff alert on the dashboard.
+    """
+    now = datetime.utcnow()
+    threshold = now - timedelta(minutes=AGING_THRESHOLD_MINUTES)
+    
+    visits = db.query(Visit).filter(
+        Visit.status == "Waiting",
+        Visit.queue_type == "General",
+        Visit.visit_timestamp < threshold
+    ).all()
+    
+    return visits
 
 def update_visit_status(
     db: Session,
     visit_id: int,
     new_status: str,
-    actor: str,
-    department_assigned: str | None = None,
+    actor: str
 ) -> Visit:
-    """Update the workflow status of a visit and emit an audit log entry.
-
-    Args:
-        db: Active database session.
-        visit_id: Primary key of the visit to update.
-        new_status: Target status — ``"Waiting"``, ``"Attending"``, or
-                    ``"Completed"``.
-        actor: Identifier of the acting entity (e.g. ``"nurse"``).
-        department_assigned: Department name to assign when routing.
-
-    Returns:
-        The updated :class:`Visit` ORM instance.
-
-    Raises:
-        KeyError: if no visit with *visit_id* exists.
-        ValueError: if the requested status transition is not permitted.
+    """Update visit.status. If "Attending", set attended_at = now.
+    If "Completed", set completed_at = now.
+    Write audit log entry. Raises ValueError for unknown status.
     """
     visit = db.get(Visit, visit_id)
     if not visit:
         raise KeyError(f"Visit {visit_id} not found")
-
-    valid_transitions = {
-        "Waiting": ["Attending", "Completed"],
-        "Attending": ["Completed", "Waiting"],
-        "Completed": []
-    }
+        
+    if new_status not in ["Attending", "Completed"]:
+        if new_status == "Waiting":
+            visit.status = "Waiting"
+        else:
+            raise ValueError(f"Unknown status: {new_status}")
     
-    if new_status not in valid_transitions.get(visit.status, []):
-        raise ValueError(f"Cannot transition from {visit.status} to {new_status}")
+    now = datetime.utcnow()
+    
+    if new_status == "Attending":
+        if visit.status != "Waiting":
+            raise ValueError(f"Cannot transition from {visit.status} to Attending")
+        visit.attended_at = now
+        visit.status = "Attending"
+    elif new_status == "Completed":
+        if visit.status != "Attending":
+            raise ValueError(f"Cannot transition from {visit.status} to Completed")
+        visit.completed_at = now
+        visit.status = "Completed"
         
-    visit.status = new_status
-    if department_assigned is not None:
-        visit.department_assigned = department_assigned
-        
-    # flush visit so it is updated before audit
     db.flush()
     log_event(db, actor=actor, action=new_status.upper(), visit_id=visit_id)
     return visit
-
-
-from datetime import datetime
-
-def mark_attending(db: Session, visit_id: int, actor: str = "doctor") -> Visit:
-    """Transition a visit from ``Waiting`` to ``Attending`` and stamp ``attended_at``.
-
-    Args:
-        db: Active database session.
-        visit_id: Primary key of the visit.
-        actor: Actor triggering the transition.
-
-    Returns:
-        The updated :class:`Visit` ORM instance.
-
-    Raises:
-        KeyError: if the visit does not exist.
-        ValueError: if the visit is not currently ``"Waiting"``.
-    """
-    visit = db.get(Visit, visit_id)
-    if not visit:
-        raise KeyError(f"Visit {visit_id} not found")
-    if visit.status != "Waiting":
-        raise ValueError(f"Visit is {visit.status}, not Waiting")
-        
-    visit.attended_at = datetime.utcnow()
-    return update_visit_status(db, visit_id, "Attending", actor)
-
-
-def mark_completed(db: Session, visit_id: int, actor: str = "doctor") -> Visit:
-    """Transition a visit to ``Completed`` and stamp ``completed_at``.
-
-    Args:
-        db: Active database session.
-        visit_id: Primary key of the visit.
-        actor: Actor triggering the transition.
-
-    Returns:
-        The updated :class:`Visit` ORM instance.
-
-    Raises:
-        KeyError: if the visit does not exist.
-        ValueError: if the visit is not currently ``"Attending"``.
-    """
-    visit = db.get(Visit, visit_id)
-    if not visit:
-        raise KeyError(f"Visit {visit_id} not found")
-    if visit.status != "Attending":
-        raise ValueError(f"Visit is {visit.status}, not Attending")
-        
-    visit.completed_at = datetime.utcnow()
-    return update_visit_status(db, visit_id, "Completed", actor)

@@ -1,41 +1,41 @@
-"""Tests for aarogyaq.priority — score-to-priority mapping and sort keys."""
-from __future__ import annotations
-
 import pytest
+from aarogyaq.priority import classify, get_color, get_queue
 
-from aarogyaq.priority import priority_to_sort_key, score_to_priority
+def test_classify_critical():
+    # score=80: "Critical", queue="Emergency", color="#D32F2F"
+    assert classify(80) == "Critical"
+    assert get_queue("Critical") == "Emergency"
+    assert get_color("Critical") == "#D32F2F"
 
+def test_classify_high():
+    # score=60: "High", queue="Emergency"
+    assert classify(60) == "High"
+    assert get_queue("High") == "Emergency"
 
-def test_score_to_priority_critical_valid_case():
-    """score_to_priority returns 'Critical' for a score >= 75.0."""
-    assert score_to_priority(80.0) == "Critical"
+def test_classify_medium():
+    # score=35: "Medium", queue="General"
+    assert classify(35) == "Medium"
+    assert get_queue("Medium") == "General"
 
+def test_classify_low():
+    # score=10: "Low", queue="General"
+    assert classify(10) == "Low"
+    assert get_queue("Low") == "General"
 
-def test_score_to_priority_out_of_range_invalid_case():
-    """score_to_priority raises ValueError for a score outside [0.0, 100.0]."""
+def test_classify_critical_boundary():
+    # score=76 (boundary): "Critical"
+    assert classify(76) == "Critical"
+
+def test_classify_high_boundary():
+    # score=51 (boundary): "High"
+    assert classify(51) == "High"
+
+def test_classify_negative_out_of_bounds():
+    # score=-1: ValueError
     with pytest.raises(ValueError):
-        score_to_priority(105.0)
+        classify(-1)
+
+def test_classify_above_out_of_bounds():
+    # score=101: ValueError
     with pytest.raises(ValueError):
-        score_to_priority(-5.0)
-
-
-def test_score_to_priority_boundary_edge():
-    """score_to_priority correctly classifies scores exactly on thresholds."""
-    assert score_to_priority(75.0) == "Critical"
-    assert score_to_priority(50.0) == "High"
-    assert score_to_priority(25.0) == "Medium"
-    assert score_to_priority(24.9) == "Low"
-    assert score_to_priority(0.0) == "Low"
-    assert score_to_priority(100.0) == "Critical"
-
-def test_priority_to_sort_key_valid():
-    """priority_to_sort_key returns correct integers."""
-    assert priority_to_sort_key("Critical") == 0
-    assert priority_to_sort_key("High") == 1
-    assert priority_to_sort_key("Medium") == 2
-    assert priority_to_sort_key("Low") == 3
-
-def test_priority_to_sort_key_invalid():
-    """priority_to_sort_key raises ValueError for invalid input."""
-    with pytest.raises(ValueError):
-        priority_to_sort_key("Unknown")
+        classify(101)

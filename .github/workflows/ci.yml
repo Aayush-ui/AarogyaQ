@@ -9,7 +9,7 @@ on:
 jobs:
   # ── Backend ────────────────────────────────────────────────────────────────
   backend:
-    name: Backend – install & test
+    name: Backend - install & test
     runs-on: ubuntu-latest
     defaults:
       run:

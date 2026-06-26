@@ -1,1 +1,107 @@
-[]
+[
+  {
+    "rule_id": "RULE-001",
+    "conditions": ["chest_pain", "difficulty_breathing"],
+    "operator": "AND",
+    "score": 45,
+    "label": "Cardiac-Respiratory Emergency"
+  },
+  {
+    "rule_id": "RULE-002",
+    "conditions": ["chest_pain", "diabetes_history"],
+    "operator": "AND",
+    "score": 20,
+    "label": "Cardiac High-Risk Comorbidity"
+  },
+  {
+    "rule_id": "RULE-003",
+    "conditions": ["loss_of_consciousness"],
+    "operator": "OR",
+    "score": 50,
+    "label": "Neurological Emergency"
+  },
+  {
+    "rule_id": "RULE-004",
+    "conditions": ["pain_level >= 8"],
+    "operator": "OR",
+    "score": 15,
+    "label": "Severe Pain"
+  },
+  {
+    "rule_id": "RULE-005",
+    "conditions": ["chest_pain"],
+    "operator": "OR",
+    "score": 25,
+    "label": "Chest Pain Unspecified"
+  },
+  {
+    "rule_id": "RULE-006",
+    "conditions": ["difficulty_breathing"],
+    "operator": "OR",
+    "score": 20,
+    "label": "Respiratory Distress"
+  },
+  {
+    "rule_id": "RULE-007",
+    "conditions": ["high_fever", "altered_mental_status"],
+    "operator": "AND",
+    "score": 35,
+    "label": "Sepsis Indicator"
+  },
+  {
+    "rule_id": "RULE-008",
+    "conditions": ["seizure"],
+    "operator": "OR",
+    "score": 40,
+    "label": "Active Seizure"
+  },
+  {
+    "rule_id": "RULE-009",
+    "conditions": ["stroke_symptoms"],
+    "operator": "OR",
+    "score": 45,
+    "label": "Stroke Symptoms"
+  },
+  {
+    "rule_id": "RULE-010",
+    "conditions": ["pregnancy", "abdominal_pain"],
+    "operator": "AND",
+    "score": 30,
+    "label": "Obstetric Concern"
+  },
+  {
+    "rule_id": "RULE-011",
+    "conditions": ["head_injury"],
+    "operator": "OR",
+    "score": 25,
+    "label": "Trauma Head"
+  },
+  {
+    "rule_id": "RULE-012",
+    "conditions": ["bleeding_uncontrolled"],
+    "operator": "OR",
+    "score": 40,
+    "label": "Active Haemorrhage"
+  },
+  {
+    "rule_id": "RULE-013",
+    "conditions": ["vomiting", "dehydration_signs"],
+    "operator": "AND",
+    "score": 10,
+    "label": "GI Distress with Dehydration"
+  },
+  {
+    "rule_id": "RULE-014",
+    "conditions": ["allergic_reaction_severe"],
+    "operator": "OR",
+    "score": 50,
+    "label": "Anaphylaxis Risk"
+  },
+  {
+    "rule_id": "RULE-015",
+    "conditions": ["age >= 70", "chest_pain"],
+    "operator": "AND",
+    "score": 15,
+    "label": "Elderly Cardiac Concern"
+  }
+]
