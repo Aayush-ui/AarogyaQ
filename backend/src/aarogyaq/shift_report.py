@@ -13,88 +13,84 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 
-class ShiftReportError(Exception):
-    """Raised when shift report parameters are invalid."""
-
-
-from aarogyaq.models import Visit
+from datetime import datetime
+from sqlalchemy.orm import Session
+from aarogyaq.models import Visit, AuditLog
 
 def generate_shift_report(
     db: Session,
-    start_dt: datetime,
-    end_dt: datetime,
-) -> dict[str, Any]:
-    """Produce a shift-level summary for visits completed within the window.
-
-    Args:
-        db: Active database session.
-        start_dt: Inclusive start of the reporting window (UTC).
-        end_dt: Exclusive end of the reporting window (UTC).
-
-    Returns:
-        A dict with the following keys:
-
-        * ``"period"``                 — ``{"start": str, "end": str}``
-        * ``"total_visits"``           — int
-        * ``"by_priority"``            — ``{"Critical": int, "High": int, ...}``
-        * ``"by_queue_type"``          — ``{"Emergency": int, "General": int}``
-        * ``"avg_wait_minutes"``       — float
-        * ``"avg_completion_minutes"`` — float
-        * ``"department_breakdown"``   — ``{dept_name: int}``
-
-    Raises:
-        ShiftReportError: if *end_dt* is not strictly after *start_dt*.
+    shift_start: datetime,
+    shift_end: datetime
+) -> dict:
     """
-    if end_dt <= start_dt:
-        raise ShiftReportError("end_dt must be strictly after start_dt")
-        
+    Aggregate all visits within [shift_start, shift_end] and return
+    a report dict with exactly the specified structure.
+    """
+    # Find all visits that were registered in this shift window
     visits = db.query(Visit).filter(
-        Visit.status == "Completed",
-        Visit.completed_at >= start_dt,
-        Visit.completed_at < end_dt
+        Visit.visit_timestamp >= shift_start,
+        Visit.visit_timestamp <= shift_end
     ).all()
     
-    total = len(visits)
-    
     report = {
-        "period": {
-            "start": start_dt.isoformat(),
-            "end": end_dt.isoformat(),
+        "shift_start": shift_start.isoformat(),
+        "shift_end": shift_end.isoformat(),
+        "total_patients": len(visits),
+        "by_priority": {
+            "Critical": 0,
+            "High": 0,
+            "Medium": 0,
+            "Low": 0
         },
-        "total_visits": total,
-        "by_priority": {"Critical": 0, "High": 0, "Medium": 0, "Low": 0},
-        "by_queue_type": {"Emergency": 0, "General": 0},
-        "avg_wait_minutes": 0.0,
-        "avg_completion_minutes": 0.0,
-        "department_breakdown": {},
+        "by_queue": {
+            "Emergency": 0,
+            "General": 0
+        },
+        "avg_wait_time_minutes": None,
+        "longest_wait_minutes": None,
+        "patients_completed": 0,
+        "patients_still_waiting": 0,
+        "stale_alert_count": 0
     }
     
-    if total == 0:
+    if not visits:
         return report
-        
-    total_wait = 0.0
-    total_comp = 0.0
+
+    wait_times = []
     
     for v in visits:
-        report["by_queue_type"][v.queue_type] = report["by_queue_type"].get(v.queue_type, 0) + 1
-        
-        dept = v.department_assigned or "Unassigned"
-        report["department_breakdown"][dept] = report["department_breakdown"].get(dept, 0) + 1
-        
-        # Priority from latest assessment
+        # Queue stats
+        if v.queue_type in report["by_queue"]:
+            report["by_queue"][v.queue_type] += 1
+            
+        # Priority stats
         priority = "Low"
         if v.assessments:
-            active_a = max(v.assessments, key=lambda x: x.assessment_id)
-            priority = active_a.priority_level
-        report["by_priority"][priority] = report["by_priority"].get(priority, 0) + 1
+            active = max(v.assessments, key=lambda a: a.assessment_id)
+            priority = active.priority_level
+        if priority in report["by_priority"]:
+            report["by_priority"][priority] += 1
+            
+        # Status counts
+        if v.status == "Completed":
+            report["patients_completed"] += 1
+            if v.visit_timestamp and v.attended_at:
+                wait = (v.attended_at - v.visit_timestamp).total_seconds() / 60.0
+                wait_times.append(wait)
+        elif v.status == "Waiting":
+            report["patients_still_waiting"] += 1
+            
+    if wait_times:
+        report["avg_wait_time_minutes"] = sum(wait_times) / len(wait_times)
+        report["longest_wait_minutes"] = max(wait_times)
         
-        wait_s = (v.attended_at - v.visit_timestamp).total_seconds() if v.attended_at else 0.0
-        comp_s = (v.completed_at - v.visit_timestamp).total_seconds() if v.completed_at else 0.0
-        
-        total_wait += wait_s
-        total_comp += comp_s
-        
-    report["avg_wait_minutes"] = round((total_wait / total) / 60.0, 2)
-    report["avg_completion_minutes"] = round((total_comp / total) / 60.0, 2)
+    # Get stale alert count in this window
+    stale_alerts = db.query(AuditLog).filter(
+        AuditLog.action == "SYSTEM_ALERT_AGING",
+        AuditLog.logged_at >= shift_start,
+        AuditLog.logged_at <= shift_end
+    ).count()
+    
+    report["stale_alert_count"] = stale_alerts
     
     return report

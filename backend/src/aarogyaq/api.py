@@ -1,261 +1,192 @@
-"""
-Single responsibility: define all FastAPI routes for the AarogyaQ REST API.
-
-Route handlers are intentionally thin: they validate HTTP-layer concerns
-(path/query params, auth headers) and delegate immediately to the orchestrator
-or service modules.  No business logic lives here.
-"""
-from __future__ import annotations
-
-from typing import Any
-
-from fastapi import APIRouter, FastAPI, status, Depends, HTTPException
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from typing import List, Optional, Any
 from sqlalchemy.orm import Session
 from datetime import datetime
+import logging
+
 from aarogyaq.database import get_db
-from aarogyaq.department import list_departments, update_department_status
-from aarogyaq.models import (
-    DepartmentResponse,
-    DepartmentStatusUpdate,
-    PatientCreate,
-    PatientResponse,
-    TriageResult,
-    VisitCreate,
-    VisitResponse,
-    VisitStatusUpdate,
-    Visit,
-    Assessment,
-    DoctorSummary,
-    VisitOut,
-    AssessmentOut,
-    SummaryOut,
-    AuditLogOut,
-)
-from aarogyaq.orchestrator import reassess_visit, triage_new_visit
-from aarogyaq.patient_intake import (
-    find_patients_by_phone,
-    get_patient,
-    register_patient,
-)
-from aarogyaq.queue_manager import (
-    get_emergency_queue,
-    get_general_queue,
-    update_visit_status,
-)
-from aarogyaq.audit import get_audit_trail
-from aarogyaq.shift_report import generate_shift_report
+from aarogyaq.models import VisitOut, AssessmentOut, DepartmentOut, Visit, Department, Patient
+from aarogyaq.patient_intake import register_patient
+from aarogyaq.orchestrator import assess_patient, reassess_patient
+from aarogyaq.queue_manager import get_emergency_queue, get_general_queue, get_stale_patients, update_visit_status
 
-app = FastAPI(
-    title="AarogyaQ",
-    description="AI-powered hospital patient triage and queue management CDSS",
-    version="0.1.0",
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-)
+logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1")
+app = FastAPI(title="AarogyaQ API")
+router = APIRouter()
 
+# Exception Handlers
+@app.exception_handler(ValueError)
+async def value_error_handler(request: Request, exc: ValueError):
+    # Map ValueErrors to 422 if it's about invalid range or unknown ID
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
 
-# ── System ────────────────────────────────────────────────────────────────────
+@app.exception_handler(Exception)
+async def generic_error_handler(request: Request, exc: Exception):
+    logger.error(f"Internal server error: {exc}", exc_info=True)
+    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
-@router.get("/health", tags=["system"])
-async def health_check() -> dict[str, str]:
-    """Return a simple liveness response."""
-    return {"status": "ok"}
+# Request Models
+class RegisterRequest(BaseModel):
+    name: str
+    age: int
+    gender: str
+    phone: Optional[str] = None
+    chief_complaint: str
+    pain_level: int
+    symptom_duration: Optional[int] = None
+    existing_conditions: List[str]
+    use_ai: bool = False
 
+class ReassessRequest(BaseModel):
+    chief_complaint: str
+    pain_level: int
+    use_ai: bool = False
 
-# ── Patients ──────────────────────────────────────────────────────────────────
+class VisitStatusPatch(BaseModel):
+    status: str
+    actor: str
 
-@router.post(
-    "/patients",
-    response_model=PatientResponse,
-    status_code=status.HTTP_201_CREATED,
-    tags=["patients"],
-)
-async def create_patient(data: PatientCreate, db: Session = Depends(get_db)) -> Any:
-    """Register a new patient and return their record."""
-    try:
-        p, v = register_patient(
-            db,
-            name=data.name,
-            age=data.age,
-            gender=data.gender,
-            phone=data.phone,
-            chief_complaint="Patient registered directly",
-            pain_level=1,
-            symptom_duration=None,
-            existing_conditions=[]
-        )
-        return p
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+class DeptStatusPatch(BaseModel):
+    status: str
 
+# Helpers
+import json
 
-@router.get("/patients/{patient_id}", response_model=PatientResponse, tags=["patients"])
-async def read_patient(patient_id: str, db: Session = Depends(get_db)) -> Any:
-    """Retrieve a patient by their ARQ ID."""
-    try:
-        return get_patient(db, patient_id)
-    except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-
-@router.get("/patients", response_model=list[PatientResponse], tags=["patients"])
-async def search_patients_by_phone(phone: str, db: Session = Depends(get_db)) -> Any:
-    """Search patients by phone number."""
-    return find_patients_by_phone(db, phone)
-
-
-# ── Visits / Triage ───────────────────────────────────────────────────────────
-
-@router.post(
-    "/visits",
-    response_model=TriageResult,
-    status_code=status.HTTP_201_CREATED,
-    tags=["triage"],
-)
-async def open_visit(data: VisitCreate, use_ai: bool = False, db: Session = Depends(get_db)) -> Any:
-    """Open a new visit and run the full triage pipeline."""
-    try:
-        return triage_new_visit(db, data.patient_id, data, use_ai)
-    except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.get("/visits/{visit_id}", tags=["triage"])
-async def read_visit(visit_id: int, db: Session = Depends(get_db)) -> Any:
-    """Retrieve full visit details including latest assessment and summary."""
-    v = db.get(Visit, visit_id)
-    if not v:
-        raise HTTPException(status_code=404, detail="Visit not found")
-        
-    p = get_patient(db, v.patient_id)
-    
-    assessment = None
-    if v.assessments:
-        active_a = max(v.assessments, key=lambda x: x.assessment_id)
-        assessment = AssessmentOut.model_validate(active_a)
-        
-    summary = None
-    if v.doctor_summaries:
-        latest_s = max(v.doctor_summaries, key=lambda x: x.summary_id)
-        summary = SummaryOut.model_validate(latest_s)
-        
+def visit_to_dict(v: Visit) -> dict:
     return {
-        "visit": VisitOut.model_validate(v),
-        "patient": PatientResponse.model_validate(p),
-        "assessment": assessment,
-        "summary": summary
+        "visit_id": v.visit_id,
+        "patient_id": v.patient_id,
+        "visit_timestamp": v.visit_timestamp,
+        "chief_complaint": v.chief_complaint,
+        "pain_level": v.pain_level,
+        "symptom_duration": v.symptom_duration,
+        "existing_conditions": json.loads(v.existing_conditions) if v.existing_conditions else [],
+        "queue_type": v.queue_type,
+        "status": v.status,
+        "department_assigned": v.department_assigned,
+        "attended_at": v.attended_at,
+        "completed_at": v.completed_at
     }
 
+def assessment_to_dict(a) -> dict:
+    return {
+        "assessment_id": a.assessment_id,
+        "visit_id": a.visit_id,
+        "raw_symptoms": a.raw_symptoms,
+        "mapped_symptoms": json.loads(a.mapped_symptoms) if a.mapped_symptoms else [],
+        "confidence_scores": json.loads(a.confidence_scores) if a.confidence_scores else {},
+        "risk_score": a.risk_score,
+        "priority_level": a.priority_level,
+        "score_breakdown": json.loads(a.score_breakdown) if a.score_breakdown else [],
+        "contributing_factors": json.loads(a.contributing_factors) if a.contributing_factors else [],
+        "business_rule_flags": json.loads(a.business_rule_flags) if a.business_rule_flags else [],
+        "assessed_at": a.assessed_at,
+        "is_reassessment": a.is_reassessment
+    }
 
-@router.post(
-    "/visits/{visit_id}/reassess",
-    response_model=TriageResult,
-    tags=["triage"],
-)
-async def reassess(
-    visit_id: int,
-    new_complaint: str | None = None,
-    use_ai: bool = False,
-    db: Session = Depends(get_db)
-) -> Any:
-    """Trigger a reassessment for an existing visit."""
+# Routes
+@router.post("/patients/register", status_code=201)
+async def register(data: RegisterRequest, db: Session = Depends(get_db)):
+    p, v = register_patient(
+        db, 
+        name=data.name, 
+        age=data.age, 
+        gender=data.gender, 
+        phone=data.phone, 
+        chief_complaint=data.chief_complaint, 
+        pain_level=data.pain_level, 
+        symptom_duration=data.symptom_duration, 
+        existing_conditions=data.existing_conditions
+    )
+    return assess_patient(db, v.visit_id, data.use_ai)
+
+@router.get("/queue/emergency", response_model=List[AssessmentOut])
+async def get_emergency(db: Session = Depends(get_db)):
+    visits = get_emergency_queue(db)
+    res = []
+    for v in visits:
+        if v.assessments:
+            latest = max(v.assessments, key=lambda a: a.assessment_id)
+            res.append(assessment_to_dict(latest))
+    return res
+
+@router.get("/queue/general", response_model=List[AssessmentOut])
+async def get_general(db: Session = Depends(get_db)):
+    visits = get_general_queue(db)
+    res = []
+    for v in visits:
+        if v.assessments:
+            latest = max(v.assessments, key=lambda a: a.assessment_id)
+            res.append(assessment_to_dict(latest))
+    return res
+
+@router.get("/queue/stale", response_model=List[AssessmentOut])
+async def get_stale(db: Session = Depends(get_db)):
+    visits = get_stale_patients(db)
+    res = []
+    for v in visits:
+        if v.assessments:
+            latest = max(v.assessments, key=lambda a: a.assessment_id)
+            res.append(assessment_to_dict(latest))
+    return res
+
+@router.patch("/visits/{visit_id}/status", response_model=VisitOut)
+async def patch_visit_status(visit_id: int, data: VisitStatusPatch, db: Session = Depends(get_db)):
     try:
-        return reassess_visit(db, visit_id, new_complaint, use_ai)
+        updated = update_visit_status(db, visit_id, data.status, data.actor)
+        return visit_to_dict(updated)
     except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e))
 
-
-@router.patch(
-    "/visits/{visit_id}/status",
-    response_model=VisitResponse,
-    tags=["queue"],
-)
-async def update_status(
-    visit_id: int,
-    payload: VisitStatusUpdate,
-    actor: str = "system",
-    db: Session = Depends(get_db)
-) -> Any:
-    """Update the workflow status of a visit."""
+@router.post("/visits/{visit_id}/reassess")
+async def reassess(visit_id: int, data: ReassessRequest, db: Session = Depends(get_db)):
     try:
-        return update_visit_status(db, visit_id, payload.status, actor)
-    except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        return reassess_patient(db, visit_id, data.chief_complaint, data.pain_level, data.use_ai)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e))
 
+@router.get("/patients/{patient_id}/history", response_model=List[VisitOut])
+async def patient_history(patient_id: str, db: Session = Depends(get_db)):
+    patient = db.query(Patient).filter(Patient.patient_id == patient_id).first()
+    if not patient:
+        raise HTTPException(status_code=422, detail="Unknown patient ID")
+    visits = db.query(Visit).filter(Visit.patient_id == patient_id).order_by(Visit.visit_timestamp.desc()).all()
+    return [visit_to_dict(v) for v in visits]
 
-# ── Queue ─────────────────────────────────────────────────────────────────────
+from aarogyaq.shift_report import generate_shift_report
 
-@router.get("/queue", tags=["queue"])
-async def get_queue(queue_type: str | None = None, db: Session = Depends(get_db)) -> Any:
-    """Return the live sorted patient queue."""
-    if queue_type == "Emergency":
-        return get_emergency_queue(db)
-    elif queue_type == "General":
-        return get_general_queue(db)
-    else:
-        # If no queue_type specified, return both, emergency first
-        return get_emergency_queue(db) + get_general_queue(db)
-
-
-# ── Departments ───────────────────────────────────────────────────────────────
-
-@router.get(
-    "/departments",
-    response_model=list[DepartmentResponse],
-    tags=["departments"],
-)
-async def read_departments(db: Session = Depends(get_db)) -> Any:
-    """List all departments and their current status."""
-    return list_departments(db)
-
-
-@router.patch(
-    "/departments/{dept_id}/status",
-    response_model=DepartmentResponse,
-    tags=["departments"],
-)
-async def update_dept_status(dept_id: int, payload: DepartmentStatusUpdate, db: Session = Depends(get_db)) -> Any:
-    """Update a department's availability status."""
+@router.get("/shift/report")
+async def shift_report(shift_start: str, shift_end: str, db: Session = Depends(get_db)):
     try:
-        return update_department_status(db, dept_id, payload.status)
-    except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-# ── Audit ─────────────────────────────────────────────────────────────────────
-
-@router.get("/visits/{visit_id}/audit", response_model=list[AuditLogOut], tags=["audit"])
-async def read_audit_trail(visit_id: int, db: Session = Depends(get_db)) -> Any:
-    """Retrieve the full audit trail for a visit."""
-    try:
-        return get_audit_trail(db, visit_id)
-    except KeyError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-
-# ── Shift Report ──────────────────────────────────────────────────────────────
-
-@router.get("/shift-report", tags=["reports"])
-async def get_shift_report(start: str, end: str, db: Session = Depends(get_db)) -> Any:
-    """Generate an aggregate shift report for the given UTC time window."""
-    try:
-        s_dt = datetime.fromisoformat(start)
-        e_dt = datetime.fromisoformat(end)
+        s_dt = datetime.fromisoformat(shift_start)
+        e_dt = datetime.fromisoformat(shift_end)
         return generate_shift_report(db, s_dt, e_dt)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=422, detail="Invalid datetime format")
 
+@router.patch("/departments/{dept_name}/status", response_model=DepartmentOut)
+async def patch_dept_status(dept_name: str, data: DeptStatusPatch, db: Session = Depends(get_db)):
+    dept = db.query(Department).filter(Department.name == dept_name).first()
+    if not dept:
+        raise HTTPException(status_code=422, detail="Department not found")
+    if data.status not in ["Available", "Busy", "Full"]:
+        raise HTTPException(status_code=422, detail="Invalid status")
+    
+    dept.status = data.status
+    db.flush()
+    return dept
+
+@router.get("/departments", response_model=List[DepartmentOut])
+async def get_departments_list(db: Session = Depends(get_db)):
+    return db.query(Department).all()
+
+@router.get("/health")
+async def health():
+    return {"status": "ok", "db": "connected"}
 
 app.include_router(router)

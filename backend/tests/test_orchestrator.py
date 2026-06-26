@@ -1,60 +1,55 @@
-"""Tests for aarogyaq.orchestrator — end-to-end triage workflow coordination."""
-from __future__ import annotations
-
 import pytest
+from aarogyaq.orchestrator import assess_patient, reassess_patient
+from aarogyaq.patient_intake import register_patient
+from aarogyaq.models import Assessment, AuditLog, DoctorSummary, Visit
 
-from aarogyaq.orchestrator import reassess_visit, triage_new_visit
+@pytest.fixture
+def clean_db(test_db):
+    test_db.query(AuditLog).delete()
+    test_db.query(DoctorSummary).delete()
+    test_db.query(Assessment).delete()
+    test_db.query(Visit).delete()
+    test_db.commit()
+    return test_db
 
-
-from aarogyaq.models import Patient, VisitCreate, Visit
-from aarogyaq.models import TriageResult
-
-def test_triage_new_visit_returns_triage_result_valid_case(test_db):
-    """triage_new_visit returns a TriageResult for a valid patient and visit."""
-    p = Patient(patient_id="ARQ-01", name="Z", age=40, gender="Male")
-    test_db.add(p)
-    test_db.flush()
+def test_assess_critical(clean_db):
+    # Register a patient (chest_pain description), call assess_patient():
+    # assert priority is "Critical" or "High", department is "Emergency" or "Cardiology", summary is non-empty string.
+    p, v = register_patient(clean_db, "John", 40, "Male", None, "chest pain, difficulty breathing", 8, None, [])
     
-    data = VisitCreate(
-        patient_id="ARQ-01",
-        chief_complaint="Chest pain",
-        pain_level=8,
-        symptom_duration=30,
-        existing_conditions=["Hypertension"],
-        queue_type="Emergency"
-    )
+    res = assess_patient(clean_db, v.visit_id)
     
-    res = triage_new_visit(test_db, "ARQ-01", data)
-    assert isinstance(res, TriageResult)
-    assert res.patient.name == "Z"
-    assert res.visit.chief_complaint == "Chest pain"
-    assert res.assessment.priority_level in ["Critical", "High", "Medium", "Low"]
-    assert "Chest pain" in res.summary.summary_text
+    assert res["priority_level"] in ["Critical", "High"]
+    assert res["department_assigned"] in ["Emergency", "Cardiology"]
+    assert res["summary"]
+    assert isinstance(res["summary"], str)
 
-
-def test_triage_new_visit_unknown_patient_invalid_case(test_db):
-    """triage_new_visit raises KeyError when the patient does not exist."""
-    data = VisitCreate(
-        patient_id="ARQ-99",
-        chief_complaint="Chest pain",
-        pain_level=8,
-        symptom_duration=30,
-        existing_conditions=[],
-        queue_type="Emergency"
-    )
-    with pytest.raises(KeyError):
-        triage_new_visit(test_db, "ARQ-999", data)
-
-
-def test_reassess_completed_visit_edge(test_db):
-    """reassess_visit raises ValueError when the visit status is 'Completed'."""
-    p = Patient(patient_id="ARQ-02", name="W", age=20, gender="Female")
-    test_db.add(p)
-    test_db.flush()
+def test_assess_low(clean_db):
+    # Register a low-acuity patient (mild headache), call assess_patient():
+    # assert priority is "Low" or "Medium", queue is "General".
+    p, v = register_patient(clean_db, "Jane", 20, "Female", None, "mild headache", 2, None, [])
     
-    v = Visit(patient_id="ARQ-02", chief_complaint="A", pain_level=1, queue_type="General", status="Completed")
-    test_db.add(v)
-    test_db.flush()
+    res = assess_patient(clean_db, v.visit_id)
     
-    with pytest.raises(ValueError, match="Cannot reassess a completed visit"):
-        reassess_visit(test_db, v.visit_id, "B")
+    assert res["priority_level"] in ["Low", "Medium"]
+    assert res["queue_type"] == "General"
+
+def test_reassess_patient(clean_db):
+    # Call reassess_patient() upgrading pain level from 3 to 10:
+    # assert new assessment has is_reassessment=True, priority re-evaluated.
+    p, v = register_patient(clean_db, "Bob", 30, "Male", None, "knee pain", 3, None, [])
+    
+    res1 = assess_patient(clean_db, v.visit_id)
+    
+    res2 = reassess_patient(clean_db, v.visit_id, "knee pain worse", 10)
+    
+    # Verify new assessment is_reassessment = True
+    assessments = clean_db.query(Assessment).filter(Assessment.visit_id == v.visit_id).all()
+    assert len(assessments) == 2
+    latest = max(assessments, key=lambda a: a.assessment_id)
+    assert latest.is_reassessment is True
+
+def test_assess_invalid_visit(clean_db):
+    # Call assess_patient() with non-existent visit_id: ValueError raised.
+    with pytest.raises(ValueError):
+        assess_patient(clean_db, 99999)

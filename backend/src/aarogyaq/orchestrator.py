@@ -1,35 +1,144 @@
-"""
-Single responsibility: coordinate the end-to-end triage workflow.
-
-Calls ``patient_intake``, ``ai_symptom``, ``rule_engine``, ``summary_gen``,
-and ``audit`` in the correct sequence so that API route handlers remain thin
-and free of business logic.
-"""
-from __future__ import annotations
-
-import json
-from aarogyaq.models import Visit, Assessment, DoctorSummary
-from aarogyaq.models import PatientOut, VisitOut, AssessmentOut, SummaryOut
-from datetime import datetime
-from typing import Any
-from aarogyaq.ai_symptom import map_symptoms
-from aarogyaq.audit import log_event
-from aarogyaq.models import TriageResult, VisitCreate
-from aarogyaq.patient_intake import get_patient
-from aarogyaq.rule_engine import (
-    load_clinical_rules, load_business_rules, evaluate_rules, apply_business_rules
-)
-from aarogyaq.summary_gen import generate_summary
 from sqlalchemy.orm import Session
+from datetime import datetime
+import json
 
-def triage_new_visit(
-    db: Session,
-    patient_id: str,
-    visit_data: VisitCreate,
-    use_ai: bool = False,
-) -> TriageResult:
-    patient = get_patient(db, patient_id)
+from aarogyaq.models import Visit, Assessment, DoctorSummary
+from aarogyaq.patient_intake import get_patient
+from aarogyaq.ai_symptom import map_symptoms
+from aarogyaq.rule_engine import load_clinical_rules, load_business_rules, evaluate_rules, apply_business_rules
+from aarogyaq.priority import classify
+from aarogyaq.queue_manager import assign_queue
+from aarogyaq.department import route_department
+from aarogyaq.summary_gen import generate_summary
+from aarogyaq.audit import write_log
+
+def assess_patient(db: Session, visit_id: int, use_ai: bool = False) -> dict:
+    # 1. Load visit from DB
+    visit = db.query(Visit).filter(Visit.visit_id == visit_id).first()
+    if not visit:
+        raise ValueError(f"Visit {visit_id} not found")
+        
+    patient = get_patient(db, visit.patient_id)
     
+    # 2. Map symptoms
+    mapped_symptoms, confidence_scores, flagged_terms = map_symptoms(visit.chief_complaint, use_ai=use_ai)
+    
+    # 3. Evaluate clinical rules
+    from aarogyaq.models import to_list
+    existing_conditions = to_list(visit.existing_conditions)
+    clinical_rules = load_clinical_rules()
+    risk_score, fired_rules, contributing_factors = evaluate_rules(
+        mapped_symptoms, visit.pain_level, patient.age, existing_conditions, clinical_rules
+    )
+    
+    # 4. Classify priority
+    base_priority = classify(risk_score)
+    
+    # 5. Apply business rules
+    business_rules = load_business_rules()
+    final_priority, business_flags = apply_business_rules(
+        base_priority, mapped_symptoms, visit.pain_level, patient.age, business_rules
+    )
+    
+    # 6. Assign queue
+    queue_type = assign_queue(db, visit_id, final_priority)
+    
+    # 7. Route department
+    dept_name, dept_status = route_department(mapped_symptoms, final_priority, patient.age, db)
+    visit.department_assigned = dept_name
+    db.flush()
+    
+    # 8. Generate summary
+    summary_text = generate_summary(
+        patient_name=patient.name,
+        age=patient.age,
+        gender=patient.gender,
+        chief_complaint=visit.chief_complaint,
+        mapped_symptoms=mapped_symptoms,
+        pain_level=visit.pain_level,
+        existing_conditions=existing_conditions,
+        priority_level=final_priority,
+        contributing_factors=contributing_factors,
+        department_assigned=dept_name,
+        use_ai=use_ai
+    )
+    
+    # 9. Persist Assessment
+    assessment = Assessment(
+        visit_id=visit_id,
+        raw_symptoms=visit.chief_complaint,
+        mapped_symptoms=json.dumps(mapped_symptoms),
+        confidence_scores=json.dumps(confidence_scores),
+        priority_level=final_priority,
+        risk_score=risk_score,
+        score_breakdown=json.dumps(fired_rules),
+        contributing_factors=json.dumps(contributing_factors),
+        business_rule_flags=json.dumps(business_flags),
+        is_reassessment=False
+    )
+    db.add(assessment)
+    db.flush()
+    
+    # 10. Persist DoctorSummary
+    summary = db.query(DoctorSummary).filter(DoctorSummary.visit_id == visit_id).first()
+    if summary:
+        summary.summary_text = summary_text
+        summary.generated_at = datetime.utcnow()
+    else:
+        summary = DoctorSummary(
+            visit_id=visit_id,
+            summary_text=summary_text,
+        )
+        db.add(summary)
+    db.flush()
+    
+    # 11. Write audit log
+    write_log(db, visit_id=visit_id, actor="system", action="SUMMARY_GENERATED")
+    
+    from aarogyaq.priority import get_color
+    return {
+        "visit_id": visit_id,
+        "patient_id": patient.patient_id,
+        "patient_name": patient.name,
+        "priority_level": final_priority,
+        "risk_score": float(risk_score),
+        "queue_type": queue_type,
+        "department_assigned": dept_name,
+        "department_status": dept_status,
+        "mapped_symptoms": mapped_symptoms,
+        "confidence_scores": confidence_scores,
+        "flagged_low_confidence": flagged_terms,
+        "contributing_factors": contributing_factors,
+        "business_rule_flags": business_flags,
+        "score_breakdown": fired_rules,
+        "summary": summary_text,
+        "priority_color": get_color(final_priority),
+        "assessed_at": assessment.assessed_at.isoformat() if assessment.assessed_at else datetime.utcnow().isoformat()
+    }
+
+def reassess_patient(db: Session, visit_id: int, new_chief_complaint: str, new_pain_level: int, use_ai: bool = False) -> dict:
+    visit = db.query(Visit).filter(Visit.visit_id == visit_id).first()
+    if not visit:
+        raise ValueError(f"Visit {visit_id} not found")
+        
+    visit.chief_complaint = new_chief_complaint
+    visit.pain_level = new_pain_level
+    db.flush()
+    
+    result = assess_patient(db, visit_id, use_ai)
+    
+    # Find the newly created assessment (it's the latest one)
+    latest_assessment = max(visit.assessments, key=lambda a: a.assessment_id)
+    latest_assessment.is_reassessment = True
+    db.flush()
+    
+    write_log(db, visit_id=visit_id, actor="nurse", action="REASSESSED")
+    
+    return result
+
+# --- Backward compatibility for api.py tests ---
+def triage_new_visit(db: Session, patient_id: str, visit_data, use_ai: bool = False):
+    from aarogyaq.models import TriageResult, PatientOut, VisitOut, AssessmentOut, SummaryOut
     visit = Visit(
         patient_id=patient_id,
         chief_complaint=visit_data.chief_complaint,
@@ -43,226 +152,37 @@ def triage_new_visit(
     db.add(visit)
     db.flush()
     
-    mapped_symptoms, confidence_scores, flagged_low_confidence = map_symptoms(visit.chief_complaint, use_ai)
+    res = assess_patient(db, visit.visit_id, use_ai)
+    patient = get_patient(db, patient_id)
     
-    clinical_rules = load_clinical_rules()
-    business_rules = load_business_rules()
-    
-    score, fired_rules, factors = evaluate_rules(
-        mapped_symptoms=mapped_symptoms,
-        pain_level=visit.pain_level,
-        age=patient.age,
-        existing_conditions=visit_data.existing_conditions,
-        rules=clinical_rules
-    )
-    
-    from aarogyaq.priority import classify
-    base_priority = classify(score)
-            
-    final_priority, b_flags = apply_business_rules(
-        base_priority=base_priority,
-        mapped_symptoms=mapped_symptoms,
-        pain_level=visit.pain_level,
-        age=patient.age,
-        business_rules=business_rules
-    )
-    
-    assessment = Assessment(
-        visit_id=visit.visit_id,
-        raw_symptoms=visit.chief_complaint,
-        mapped_symptoms=json.dumps(mapped_symptoms),
-        confidence_scores=json.dumps(confidence_scores),
-        priority_level=final_priority,
-        risk_score=score,
-        score_breakdown=json.dumps(fired_rules),
-        contributing_factors=json.dumps(factors),
-        business_rule_flags=json.dumps(b_flags),
-        is_reassessment=False
-    )
-    db.add(assessment)
-    db.flush()
-    
-    from aarogyaq.queue_manager import assign_queue
-    assign_queue(db, visit.visit_id, final_priority)
-    
-    from aarogyaq.department import route_department
-    routed_dept, _ = route_department(
-        mapped_symptoms=mapped_symptoms,
-        priority_level=final_priority,
-        age=patient.age,
-        db=db
-    )
-    visit.department_assigned = routed_dept
-    db.flush()
-    
-    summary_text = generate_summary(
-        patient_name=patient.name,
-        age=patient.age,
-        gender=patient.gender,
-        chief_complaint=visit.chief_complaint,
-        mapped_symptoms=mapped_symptoms,
-        pain_level=visit.pain_level,
-        existing_conditions=visit_data.existing_conditions,
-        priority_level=final_priority,
-        contributing_factors=factors,
-        department_assigned=routed_dept,
-        use_ai=use_ai,
-    )
-    
-    summary = DoctorSummary(
-        visit_id=visit.visit_id,
-        summary_text=summary_text,
-    )
-    db.add(summary)
-    db.flush()
-    
-    log_event(db, actor="system", action="ASSESSED", visit_id=visit.visit_id, notes=f"Score: {score}")
+    assessment = max(visit.assessments, key=lambda a: a.assessment_id)
+    summary = max(visit.doctor_summaries, key=lambda s: s.summary_id)
     
     return TriageResult(
-        patient=PatientOut(
-            patient_id=patient.patient_id, name=patient.name, age=patient.age,
-            gender=patient.gender, phone=patient.phone, created_at=patient.created_at
-        ),
-        visit=VisitOut(
-            visit_id=visit.visit_id, patient_id=visit.patient_id, visit_timestamp=visit.visit_timestamp,
-            chief_complaint=visit.chief_complaint, pain_level=visit.pain_level, symptom_duration=visit.symptom_duration,
-            existing_conditions=visit_data.existing_conditions, queue_type=visit.queue_type,
-            status=visit.status, department_assigned=visit.department_assigned,
-            attended_at=visit.attended_at, completed_at=visit.completed_at
-        ),
-        assessment=AssessmentOut(
-            assessment_id=assessment.assessment_id, visit_id=assessment.visit_id, raw_symptoms=assessment.raw_symptoms,
-            mapped_symptoms=mapped_symptoms, confidence_scores=confidence_scores,
-            risk_score=assessment.risk_score, priority_level=assessment.priority_level,
-            score_breakdown=fired_rules, contributing_factors=factors,
-            business_rule_flags=b_flags, assessed_at=assessment.assessed_at,
-            is_reassessment=assessment.is_reassessment
-        ),
-        summary=SummaryOut(
-            summary_id=summary.summary_id, visit_id=summary.visit_id, summary_text=summary.summary_text,
-            generated_at=summary.generated_at
-        )
+        patient=PatientOut.model_validate(patient),
+        visit=VisitOut.model_validate(visit),
+        assessment=AssessmentOut.model_validate(assessment),
+        summary=SummaryOut.model_validate(summary)
     )
 
-def reassess_visit(
-    db: Session,
-    visit_id: int,
-    new_complaint: str | None = None,
-    use_ai: bool = False,
-) -> TriageResult:
+def reassess_visit(db: Session, visit_id: int, new_complaint: str | None = None, use_ai: bool = False):
     visit = db.get(Visit, visit_id)
     if not visit:
         raise KeyError(f"Visit {visit_id} not found")
-    if visit.status == "Completed":
-        raise ValueError("Cannot reassess a completed visit")
-        
+    
+    comp = new_complaint if new_complaint else visit.chief_complaint
+    pain = visit.pain_level
+    
+    res = reassess_patient(db, visit_id, comp, pain, use_ai)
+    
+    from aarogyaq.models import TriageResult, PatientOut, VisitOut, AssessmentOut, SummaryOut
     patient = get_patient(db, visit.patient_id)
-    complaint = new_complaint if new_complaint is not None else visit.chief_complaint
-    from aarogyaq.models import to_list
-    existing_conditions = to_list(visit.existing_conditions)
-    
-    mapped_symptoms, confidence_scores, flagged_low_confidence = map_symptoms(complaint, use_ai)
-    
-    clinical_rules = load_clinical_rules()
-    business_rules = load_business_rules()
-    
-    score, fired_rules, factors = evaluate_rules(
-        mapped_symptoms=mapped_symptoms,
-        pain_level=visit.pain_level,
-        age=patient.age,
-        existing_conditions=existing_conditions,
-        rules=clinical_rules
-    )
-    
-    from aarogyaq.priority import classify
-    base_priority = classify(score)
-            
-    final_priority, b_flags = apply_business_rules(
-        base_priority=base_priority,
-        mapped_symptoms=mapped_symptoms,
-        pain_level=visit.pain_level,
-        age=patient.age,
-        business_rules=business_rules
-    )
-    
-    assessment = Assessment(
-        visit_id=visit.visit_id,
-        raw_symptoms=complaint,
-        mapped_symptoms=json.dumps(mapped_symptoms),
-        confidence_scores=json.dumps(confidence_scores),
-        priority_level=final_priority,
-        risk_score=score,
-        score_breakdown=json.dumps(fired_rules),
-        contributing_factors=json.dumps(factors),
-        business_rule_flags=json.dumps(b_flags),
-        is_reassessment=True
-    )
-    db.add(assessment)
-    db.flush()
-    
-    from aarogyaq.queue_manager import assign_queue
-    assign_queue(db, visit.visit_id, final_priority)
-    
-    from aarogyaq.department import route_department
-    routed_dept, _ = route_department(
-        mapped_symptoms=mapped_symptoms,
-        priority_level=final_priority,
-        age=patient.age,
-        db=db
-    )
-    visit.department_assigned = routed_dept
-    db.flush()
-    
-    summary_text = generate_summary(
-        patient_name=patient.name,
-        age=patient.age,
-        gender=patient.gender,
-        chief_complaint=complaint,
-        mapped_symptoms=mapped_symptoms,
-        pain_level=visit.pain_level,
-        existing_conditions=existing_conditions,
-        priority_level=final_priority,
-        contributing_factors=factors,
-        department_assigned=routed_dept,
-        use_ai=use_ai,
-    )
-    
-    summary = db.query(DoctorSummary).filter(DoctorSummary.visit_id == visit.visit_id).first()
-    if summary:
-        summary.summary_text = summary_text
-        summary.generated_at = datetime.utcnow()
-    else:
-        summary = DoctorSummary(
-            visit_id=visit.visit_id,
-            summary_text=summary_text,
-        )
-        db.add(summary)
-    
-    db.flush()
-    log_event(db, actor="system", action="REASSESSED", visit_id=visit.visit_id, notes=f"Score: {score}")
+    assessment = max(visit.assessments, key=lambda a: a.assessment_id)
+    summary = max(visit.doctor_summaries, key=lambda s: s.summary_id)
     
     return TriageResult(
-        patient=PatientOut(
-            patient_id=patient.patient_id, name=patient.name, age=patient.age,
-            gender=patient.gender, phone=patient.phone, created_at=patient.created_at
-        ),
-        visit=VisitOut(
-            visit_id=visit.visit_id, patient_id=visit.patient_id, visit_timestamp=visit.visit_timestamp,
-            chief_complaint=visit.chief_complaint, pain_level=visit.pain_level, symptom_duration=visit.symptom_duration,
-            existing_conditions=existing_conditions, queue_type=visit.queue_type,
-            status=visit.status, department_assigned=visit.department_assigned,
-            attended_at=visit.attended_at, completed_at=visit.completed_at
-        ),
-        assessment=AssessmentOut(
-            assessment_id=assessment.assessment_id, visit_id=assessment.visit_id, raw_symptoms=assessment.raw_symptoms,
-            mapped_symptoms=mapped_symptoms, confidence_scores=confidence_scores,
-            risk_score=assessment.risk_score, priority_level=assessment.priority_level,
-            score_breakdown=fired_rules, contributing_factors=factors,
-            business_rule_flags=b_flags, assessed_at=assessment.assessed_at,
-            is_reassessment=assessment.is_reassessment
-        ),
-        summary=SummaryOut(
-            summary_id=summary.summary_id, visit_id=summary.visit_id, summary_text=summary.summary_text,
-            generated_at=summary.generated_at
-        )
+        patient=PatientOut.model_validate(patient),
+        visit=VisitOut.model_validate(visit),
+        assessment=AssessmentOut.model_validate(assessment),
+        summary=SummaryOut.model_validate(summary)
     )
