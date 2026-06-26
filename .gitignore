@@ -43,3 +43,7 @@ yarn-error.log*
 .vscode/
 *.swp
 *.swo
+
+# Database
+aarogyaq.db
+*.db

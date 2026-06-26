@@ -21,25 +21,53 @@ def assess_patient(db: Session, visit_id: int, use_ai: bool = False) -> dict:
     patient = get_patient(db, visit.patient_id)
     
     # 2. Map symptoms
-    mapped_symptoms, confidence_scores, flagged_terms = map_symptoms(visit.chief_complaint, use_ai=use_ai)
+    structured_findings, confidence_scores, flagged_terms = map_symptoms(visit.chief_complaint, use_ai=use_ai)
+    mapped_symptoms = [k for k, v in structured_findings.items() if v]
     
-    # 3. Evaluate clinical rules
+    # 3. Evaluate clinical rules (Layer 1, 2, 3)
     from aarogyaq.models import to_list
     existing_conditions = to_list(visit.existing_conditions)
     clinical_rules = load_clinical_rules()
-    risk_score, fired_rules, contributing_factors = evaluate_rules(
-        mapped_symptoms, visit.pain_level, patient.age, existing_conditions, clinical_rules
-    )
     
-    # 4. Classify priority
-    base_priority = classify(risk_score)
+    # NEW Layer 1: Red Flags (Wait, I need to add load_red_flag_rules and load_risk_weights to rule_engine)
+    from aarogyaq.rule_engine import load_red_flag_rules, load_risk_weights, evaluate_red_flags, evaluate_risk_weights
+    red_flag_rules = load_red_flag_rules()
+    risk_weights = load_risk_weights()
+    
+    red_flag_fired, red_flag_factors = evaluate_red_flags(structured_findings, red_flag_rules)
+    
+    if red_flag_fired:
+        risk_score = 100.0
+        fired_rules = red_flag_factors
+        contributing_factors = [f["label"] for f in red_flag_factors]
+        base_priority = "Critical"
+    else:
+        risk_score, fired_rules, contributing_factors = evaluate_rules(
+            structured_findings, visit.pain_level, patient.age, existing_conditions, clinical_rules
+        )
+        
+        # Layer 3: Risk weights
+        risk_score, weight_factors, weight_labels = evaluate_risk_weights(
+            risk_score, structured_findings, visit.pain_level, patient.age, existing_conditions, visit.symptom_duration, risk_weights
+        )
+        fired_rules.extend(weight_factors)
+        contributing_factors.extend(weight_labels)
+        
+        # 4. Classify priority
+        base_priority = classify(risk_score)
     
     # 5. Apply business rules
     business_rules = load_business_rules()
     final_priority, business_flags = apply_business_rules(
-        base_priority, mapped_symptoms, visit.pain_level, patient.age, business_rules
+        base_priority, structured_findings, visit.pain_level, patient.age, business_rules
     )
     
+    if final_priority != base_priority:
+        write_log(db, visit_id=visit_id, actor="system", action="PRIORITY_CHANGED", notes=f"{base_priority} -> {final_priority}")
+        
+    for rule in fired_rules:
+        write_log(db, visit_id=visit_id, actor="system", action="RULE_FIRED", notes=f"Rule: {rule['rule_id']}")
+        
     # 6. Assign queue
     queue_type = assign_queue(db, visit_id, final_priority)
     

@@ -103,34 +103,46 @@ async def register(data: RegisterRequest, db: Session = Depends(get_db)):
     )
     return assess_patient(db, v.visit_id, data.use_ai)
 
-@router.get("/queue/emergency", response_model=List[AssessmentOut])
+@router.get("/queue/emergency")
 async def get_emergency(db: Session = Depends(get_db)):
     visits = get_emergency_queue(db)
     res = []
     for v in visits:
-        if v.assessments:
-            latest = max(v.assessments, key=lambda a: a.assessment_id)
-            res.append(assessment_to_dict(latest))
+        latest = max(v.assessments, key=lambda a: a.assessment_id) if v.assessments else None
+        res.append({
+            "patient": {"patient_id": v.patient.patient_id, "name": v.patient.name, "age": v.patient.age, "gender": v.patient.gender},
+            "visit": visit_to_dict(v),
+            "assessment": assessment_to_dict(latest) if latest else {},
+            "summary": {"summary_text": v.doctor_summary.summary_text} if v.doctor_summary else {}
+        })
     return res
 
-@router.get("/queue/general", response_model=List[AssessmentOut])
+@router.get("/queue/general")
 async def get_general(db: Session = Depends(get_db)):
     visits = get_general_queue(db)
     res = []
     for v in visits:
-        if v.assessments:
-            latest = max(v.assessments, key=lambda a: a.assessment_id)
-            res.append(assessment_to_dict(latest))
+        latest = max(v.assessments, key=lambda a: a.assessment_id) if v.assessments else None
+        res.append({
+            "patient": {"patient_id": v.patient.patient_id, "name": v.patient.name, "age": v.patient.age, "gender": v.patient.gender},
+            "visit": visit_to_dict(v),
+            "assessment": assessment_to_dict(latest) if latest else {},
+            "summary": {"summary_text": v.doctor_summary.summary_text} if v.doctor_summary else {}
+        })
     return res
 
-@router.get("/queue/stale", response_model=List[AssessmentOut])
+@router.get("/queue/stale")
 async def get_stale(db: Session = Depends(get_db)):
     visits = get_stale_patients(db)
     res = []
     for v in visits:
-        if v.assessments:
-            latest = max(v.assessments, key=lambda a: a.assessment_id)
-            res.append(assessment_to_dict(latest))
+        latest = max(v.assessments, key=lambda a: a.assessment_id) if v.assessments else None
+        res.append({
+            "patient": {"patient_id": v.patient.patient_id, "name": v.patient.name, "age": v.patient.age, "gender": v.patient.gender},
+            "visit": visit_to_dict(v),
+            "assessment": assessment_to_dict(latest) if latest else {},
+            "summary": {"summary_text": v.doctor_summary.summary_text} if v.doctor_summary else {}
+        })
     return res
 
 @router.patch("/visits/{visit_id}/status", response_model=VisitOut)
@@ -150,13 +162,23 @@ async def reassess(visit_id: int, data: ReassessRequest, db: Session = Depends(g
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-@router.get("/patients/{patient_id}/history", response_model=List[VisitOut])
+@router.get("/patients/{patient_id}/history")
 async def patient_history(patient_id: str, db: Session = Depends(get_db)):
     patient = db.query(Patient).filter(Patient.patient_id == patient_id).first()
     if not patient:
         raise HTTPException(status_code=422, detail="Unknown patient ID")
     visits = db.query(Visit).filter(Visit.patient_id == patient_id).order_by(Visit.visit_timestamp.desc()).all()
-    return [visit_to_dict(v) for v in visits]
+    
+    res = []
+    for v in visits:
+        latest = max(v.assessments, key=lambda a: a.assessment_id) if v.assessments else None
+        res.append({
+            "patient": {"patient_id": v.patient.patient_id, "name": v.patient.name, "age": v.patient.age, "gender": v.patient.gender},
+            "visit": visit_to_dict(v),
+            "assessment": assessment_to_dict(latest) if latest else {},
+            "summary": {"summary_text": v.doctor_summary.summary_text} if v.doctor_summary else {}
+        })
+    return res
 
 from aarogyaq.shift_report import generate_shift_report
 

@@ -1,0 +1,20 @@
+[
+  {
+    "rule_id": "RISK-001",
+    "conditions": {"age_gt": 65},
+    "score_modifier": 10,
+    "label": "Elderly Patient"
+  },
+  {
+    "rule_id": "RISK-002",
+    "conditions": {"age_lt": 2},
+    "score_modifier": 15,
+    "label": "Infant"
+  },
+  {
+    "rule_id": "RISK-003",
+    "conditions": {"pain_gte": 8},
+    "score_modifier": 10,
+    "label": "Severe Pain Reported"
+  }
+]

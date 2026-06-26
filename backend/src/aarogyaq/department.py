@@ -12,13 +12,8 @@ from sqlalchemy.orm import Session
 
 from aarogyaq.models import Department
 
-
 import json
 from datetime import datetime
-from pathlib import Path
-from sqlalchemy.orm import Session
-from aarogyaq.models import Department
-
 def list_departments(db: Session) -> list[Department]:
     """Return all department records ordered by name."""
     return db.query(Department).order_by(Department.name.asc()).all()
@@ -29,6 +24,9 @@ def get_department(db: Session, dept_id: int) -> Department:
         raise KeyError(f"Department {dept_id} not found")
     return dept
 
+from functools import lru_cache
+
+@lru_cache(maxsize=1)
 def load_department_config(
     path: str = "backend/config/departments.json"
 ) -> list[dict]:
@@ -91,10 +89,14 @@ def route_department(
         if best_score > 0:
             # find how many departments have the best_score
             top_depts = [d["name"] for d in config if sum(1 for sym in mapped_symptoms if sym in d["symptom_keywords"]) == best_score]
-            if len(top_depts) > 1:
-                routed_name = "General OPD"
-            else:
+            
+            # Phase 6: Emergency -> Specialty -> Fallback
+            if "Emergency" in top_depts:
+                routed_name = "Emergency"
+            elif len(top_depts) == 1:
                 routed_name = top_depts[0]
+            else:
+                routed_name = "General OPD"
         else:
             routed_name = "General OPD"
 

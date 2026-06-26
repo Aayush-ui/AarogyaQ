@@ -9,10 +9,13 @@ def clinical_rules():
 def business_rules():
     return load_business_rules()
 
+def _make_findings(symptoms):
+    return {s: True for s in symptoms}
+
 def test_rule_001_cardiac_respiratory(clinical_rules):
     # chest_pain + difficulty_breathing + age=35 + pain_level=7
     score, fired, factors = evaluate_rules(
-        mapped_symptoms=["chest_pain", "difficulty_breathing"],
+        structured_findings=_make_findings(["chest_pain", "difficulty_breathing"]),
         pain_level=7,
         age=35,
         existing_conditions=[],
@@ -29,7 +32,7 @@ def test_rule_001_cardiac_respiratory(clinical_rules):
 def test_rule_003_neuro_emergency(clinical_rules):
     # loss_of_consciousness alone
     score, fired, factors = evaluate_rules(
-        mapped_symptoms=["loss_of_consciousness"],
+        structured_findings=_make_findings(["loss_of_consciousness"]),
         pain_level=1,
         age=30,
         existing_conditions=[],
@@ -42,7 +45,7 @@ def test_rule_003_neuro_emergency(clinical_rules):
 def test_low_acuity_no_rules_fired(clinical_rules):
     # Low-acuity patient
     score, fired, factors = evaluate_rules(
-        mapped_symptoms=["headache"],
+        structured_findings=_make_findings(["headache"]),
         pain_level=3,
         age=30,
         existing_conditions=[],
@@ -56,7 +59,7 @@ def test_low_acuity_no_rules_fired(clinical_rules):
 def test_max_pain_override(clinical_rules, business_rules):
     # pain_level=10: RULE-004 fires + MAX_PAIN_OVERRIDE fires
     score, fired, factors = evaluate_rules(
-        mapped_symptoms=["headache"],
+        structured_findings=_make_findings(["headache"]),
         pain_level=10,
         age=30,
         existing_conditions=[],
@@ -68,7 +71,7 @@ def test_max_pain_override(clinical_rules, business_rules):
     base_priority = "Low"
     final_priority, b_flags = apply_business_rules(
         base_priority=base_priority,
-        mapped_symptoms=["headache"],
+        structured_findings=_make_findings(["headache"]),
         pain_level=10,
         age=30,
         business_rules=business_rules
@@ -80,7 +83,7 @@ def test_max_pain_override(clinical_rules, business_rules):
 def test_elderly_cardiac(clinical_rules, business_rules):
     # age=75 + chest_pain
     score, fired, factors = evaluate_rules(
-        mapped_symptoms=["chest_pain"],
+        structured_findings=_make_findings(["chest_pain"]),
         pain_level=5,
         age=75,
         existing_conditions=[],
@@ -92,7 +95,7 @@ def test_elderly_cardiac(clinical_rules, business_rules):
     base_priority = "Low"
     final_priority, b_flags = apply_business_rules(
         base_priority=base_priority,
-        mapped_symptoms=["chest_pain"],
+        structured_findings=_make_findings(["chest_pain"]),
         pain_level=5,
         age=75,
         business_rules=business_rules
@@ -103,7 +106,7 @@ def test_elderly_cardiac(clinical_rules, business_rules):
 def test_determinism(clinical_rules):
     # Same call twice returns byte-identical output
     out1 = evaluate_rules(
-        mapped_symptoms=["chest_pain", "difficulty_breathing"],
+        structured_findings=_make_findings(["chest_pain", "difficulty_breathing"]),
         pain_level=8,
         age=60,
         existing_conditions=["diabetes_history"],
@@ -111,7 +114,7 @@ def test_determinism(clinical_rules):
     )
     
     out2 = evaluate_rules(
-        mapped_symptoms=["chest_pain", "difficulty_breathing"],
+        structured_findings=_make_findings(["chest_pain", "difficulty_breathing"]),
         pain_level=8,
         age=60,
         existing_conditions=["diabetes_history"],

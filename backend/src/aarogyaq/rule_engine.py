@@ -10,10 +10,10 @@ The same input always produces byte-identical output.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
 from pathlib import Path
-from typing import Any
+
+from functools import lru_cache
 
 PRIORITY_THRESHOLDS = {
     "Critical": (76, 100),
@@ -22,12 +22,11 @@ PRIORITY_THRESHOLDS = {
     "Low": (0, 25),
 }
 
+@lru_cache(maxsize=1)
 def load_clinical_rules(path: str = "backend/config/clinical_rules.json") -> list[dict]:
-    """Load and return the list of clinical rule dicts. Raises FileNotFoundError
-    if path missing. Raises ValueError if JSON structure is malformed."""
+    """Load and return the list of clinical rule dicts."""
     file_path = Path(path)
     if not file_path.exists():
-        # Fallback to absolute if ran from somewhere else or root
         alt_path = Path(__file__).parent.parent.parent.parent / path
         if alt_path.exists():
             file_path = alt_path
@@ -36,10 +35,9 @@ def load_clinical_rules(path: str = "backend/config/clinical_rules.json") -> lis
             
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    if not isinstance(data, list):
-        raise ValueError("JSON content must be a list")
     return data
 
+@lru_cache(maxsize=1)
 def load_business_rules(path: str = "backend/config/business_rules.json") -> list[dict]:
     file_path = Path(path)
     if not file_path.exists():
@@ -51,31 +49,65 @@ def load_business_rules(path: str = "backend/config/business_rules.json") -> lis
             
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    if not isinstance(data, list):
-        raise ValueError("JSON content must be a list")
     return data
 
+@lru_cache(maxsize=1)
+def load_red_flag_rules(path: str = "backend/config/red_flag_rules.json") -> list[dict]:
+    file_path = Path(path)
+    if not file_path.exists():
+        alt_path = Path(__file__).parent.parent.parent.parent / path
+        if alt_path.exists():
+            file_path = alt_path
+        else:
+            # return empty if missing to avoid hard fail during migration
+            return []
+    with open(file_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+@lru_cache(maxsize=1)
+def load_risk_weights(path: str = "backend/config/risk_weights.json") -> list[dict]:
+    file_path = Path(path)
+    if not file_path.exists():
+        alt_path = Path(__file__).parent.parent.parent.parent / path
+        if alt_path.exists():
+            file_path = alt_path
+        else:
+            return []
+    with open(file_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def evaluate_red_flags(structured_findings: dict[str, bool], rules: list[dict]) -> tuple[bool, list[dict]]:
+    """Layer 1: Critical Emergency Override Rules."""
+    fired = []
+    
+    # Check simple inclusion of any red flag symptom
+    for rule in rules:
+        conds = rule.get("conditions", [])
+        for c in conds:
+            if structured_findings.get(c.lower(), False):
+                fired.append({
+                    "rule_id": rule.get("rule_id"),
+                    "label": rule.get("label"),
+                    "score": 100,
+                    "conditions_met": [c]
+                })
+                break # one is enough per rule
+                
+    return len(fired) > 0, fired
+
 def evaluate_rules(
-    mapped_symptoms: list[str],
+    structured_findings: dict[str, bool],
     pain_level: int,
     age: int,
     existing_conditions: list[str],
     rules: list[dict]
 ) -> tuple[float, list[dict], list[str]]:
-    """
-    Apply all rules against patient data. Returns:
-    (total_score, fired_rules_list, contributing_factors_list)
-    A rule fires when:
-    - operator=="AND": ALL conditions in the rule's conditions list
-      are satisfied.
-    - operator=="OR": ANY condition is satisfied.
-    """
+    """Layer 2: Weighted Clinical Rules."""
     total_score = 0.0
     fired_rules_list = []
     contributing_factors_list = []
     
-    # Normalize inputs for case-insensitive matching
-    all_symptoms = [s.lower() for s in mapped_symptoms] + [c.lower() for c in existing_conditions]
+    existing_lower = [c.lower() for c in existing_conditions]
     
     for rule in rules:
         conditions = rule.get("conditions", [])
@@ -86,7 +118,6 @@ def evaluate_rules(
             cond_str = str(cond).strip().lower()
             met = False
             
-            # Numeric checks
             if "pain_level >=" in cond_str:
                 val = int(cond_str.split(">=")[1].strip())
                 if pain_level >= val:
@@ -100,8 +131,10 @@ def evaluate_rules(
                 if age < val:
                     met = True
             else:
-                # Plain string check
-                if cond_str in all_symptoms:
+                # Check in structured_findings first
+                if structured_findings.get(cond_str, False):
+                    met = True
+                elif cond_str in existing_lower:
                     met = True
                     
             if met:
@@ -127,17 +160,56 @@ def evaluate_rules(
     total_score = max(0.0, min(100.0, total_score))
     return total_score, fired_rules_list, contributing_factors_list
 
+def evaluate_risk_weights(
+    current_score: float,
+    structured_findings: dict[str, bool],
+    pain_level: int,
+    age: int,
+    existing_conditions: list[str],
+    symptom_duration: int | None,
+    rules: list[dict]
+) -> tuple[float, list[dict], list[str]]:
+    """Layer 3: General Risk Rules."""
+    fired = []
+    labels = []
+    score_modifier = 0.0
+    
+    for rule in rules:
+        conds = rule.get("conditions", {})
+        met = True
+        
+        if "age_gt" in conds and not (age > conds["age_gt"]):
+            met = False
+        if "age_lt" in conds and not (age < conds["age_lt"]):
+            met = False
+        if "pain_gte" in conds and not (pain_level >= conds["pain_gte"]):
+            met = False
+        if "duration_days_gt" in conds:
+            if symptom_duration is None or symptom_duration <= conds["duration_days_gt"]:
+                met = False
+                
+        if met:
+            weight = float(rule.get("score_modifier", 0))
+            score_modifier += weight
+            fired.append({
+                "rule_id": rule.get("rule_id"),
+                "label": rule.get("label"),
+                "score": weight,
+                "conditions_met": ["risk_weight_match"]
+            })
+            labels.append(rule.get("label"))
+            
+    new_score = max(0.0, min(100.0, current_score + score_modifier))
+    return new_score, fired, labels
+
 def apply_business_rules(
     base_priority: str,
-    mapped_symptoms: list[str],
+    structured_findings: dict[str, bool],
     pain_level: int,
     age: int,
     business_rules: list[dict]
 ) -> tuple[str, list[str]]:
-    """
-    Apply business overrides after scoring. Returns:
-    (final_priority, business_rule_flags_fired)
-    """
+    """Business Rules Override."""
     priorities = ["Low", "Medium", "High", "Critical"]
     
     def priority_val(p: str) -> int:
@@ -147,8 +219,6 @@ def apply_business_rules(
 
     current_prio_idx = priority_val(base_priority)
     flags_fired = []
-    
-    all_symptoms = [s.lower() for s in mapped_symptoms]
     
     for rule in business_rules:
         conds = rule.get("conditions", {})
@@ -164,7 +234,7 @@ def apply_business_rules(
             met = False
         if "symptoms_include" in conds:
             for s in conds["symptoms_include"]:
-                if s.lower() not in all_symptoms:
+                if not structured_findings.get(s.lower(), False):
                     met = False
                     break
                     

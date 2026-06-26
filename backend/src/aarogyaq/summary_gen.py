@@ -37,13 +37,14 @@ def generate_summary(
     factors_str = ", ".join(contributing_factors) if contributing_factors else "None"
     
     template = (
-        f"{patient_name}, {age}yr {gender}, presenting with {chief_complaint}. "
-        f"Mapped clinical findings: {mapped_str}. "
-        f"Pain level: {pain_level}/10. "
-        f"Existing conditions: {cond_str}. "
-        f"Priority: {priority_level}. "
-        f"Key risk factors: {factors_str}. "
-        f"Routed to: {department_assigned}."
+        f"PATIENT: {patient_name}, {age}yr {gender}\n"
+        f"CHIEF COMPLAINT: {chief_complaint}\n"
+        f"CLINICAL FINDINGS: {mapped_str}\n"
+        f"PAIN LEVEL: {pain_level}/10\n"
+        f"EXISTING CONDITIONS: {cond_str}\n"
+        f"TRIAGE PRIORITY: {priority_level}\n"
+        f"RISK CONTRIBUTORS: {factors_str}\n"
+        f"ROUTING: {department_assigned}"
     )
 
     if use_ai:

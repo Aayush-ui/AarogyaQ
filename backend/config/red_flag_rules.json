@@ -1,0 +1,13 @@
+[
+  {
+    "rule_id": "RED-001",
+    "conditions": [
+      "loss_of_consciousness",
+      "seizure",
+      "stroke_symptoms",
+      "bleeding_uncontrolled",
+      "allergic_reaction_severe"
+    ],
+    "label": "Red Flag: Immediate Life Threat"
+  }
+]

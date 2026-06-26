@@ -50,13 +50,15 @@ def get_emergency_queue(db: Session) -> list[Visit]:
     
     def sort_key(v: Visit):
         priority = 3  # Default to Low
+        risk_score = 0.0
         if v.assessments:
             active = max(v.assessments, key=lambda a: a.assessment_id)
             try:
                 priority = priority_to_sort_key(active.priority_level)
+                risk_score = active.risk_score
             except ValueError:
                 pass
-        return (priority, v.visit_timestamp, v.visit_id)
+        return (priority, -risk_score, v.visit_timestamp, v.visit_id)
         
     visits.sort(key=sort_key)
     return visits
@@ -72,13 +74,15 @@ def get_general_queue(db: Session) -> list[Visit]:
     
     def sort_key(v: Visit):
         priority = 3  # Default to Low
+        risk_score = 0.0
         if v.assessments:
             active = max(v.assessments, key=lambda a: a.assessment_id)
             try:
                 priority = priority_to_sort_key(active.priority_level)
+                risk_score = active.risk_score
             except ValueError:
                 pass
-        return (priority, v.visit_timestamp, v.visit_id)
+        return (priority, -risk_score, v.visit_timestamp, v.visit_id)
         
     visits.sort(key=sort_key)
     return visits

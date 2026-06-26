@@ -1,0 +1,98 @@
+{
+  "valid_terms": [
+    "chest_pain", "difficulty_breathing", "loss_of_consciousness",
+    "seizure", "stroke_symptoms", "high_fever", "altered_mental_status",
+    "head_injury", "bleeding_uncontrolled", "allergic_reaction_severe",
+    "abdominal_pain", "vomiting", "dehydration_signs", "pregnancy",
+    "diabetes_history", "heart_disease_history", "hypertension_history",
+    "pain_level_high", "dizziness", "fainting", "back_pain", "joint_pain",
+    "skin_rash", "eye_irritation", "ear_pain", "sore_throat", "cough",
+    "cold_symptoms", "urinary_symptoms", "weakness_general"
+  ],
+  "synonyms": {
+    "chest tightness": "chest_pain",
+    "pressure": "chest_pain",
+    "pain in chest": "chest_pain",
+    "crushing chest pain": "chest_pain",
+    "burning chest pain": "chest_pain",
+    "heart attack": "chest_pain",
+    "left arm pain": "chest_pain",
+    "jaw pain": "chest_pain",
+    
+    "dyspnea": "difficulty_breathing",
+    "breathlessness": "difficulty_breathing",
+    "cannot breathe": "difficulty_breathing",
+    "can't breathe": "difficulty_breathing",
+    "sob": "difficulty_breathing",
+    "shortness of breath": "difficulty_breathing",
+    
+    "syncope": "loss_of_consciousness",
+    "collapse": "loss_of_consciousness",
+    "passed out": "loss_of_consciousness",
+    "unconscious": "loss_of_consciousness",
+    
+    "diaphoresis": "dehydration_signs",
+    "cold sweat": "dehydration_signs",
+    "sweating": "dehydration_signs",
+    "dry mouth": "dehydration_signs",
+    "poor feeding": "dehydration_signs",
+    
+    "confusion": "altered_mental_status",
+    
+    "weakness": "weakness_general",
+    "weak": "weakness_general",
+    "tired": "weakness_general",
+    "exhausted": "weakness_general",
+    
+    "facial droop": "stroke_symptoms",
+    "speech difficulty": "stroke_symptoms",
+    "slurred speech": "stroke_symptoms",
+    
+    "shoulder pain": "joint_pain",
+    "fracture": "joint_pain",
+    
+    "fever": "high_fever",
+    "hot": "high_fever",
+    
+    "bleeding": "bleeding_uncontrolled",
+    
+    "burn": "skin_rash",
+    "rash": "skin_rash",
+    "itchy skin": "skin_rash",
+    
+    "road accident": "head_injury",
+    "head hurt": "head_injury",
+    "headache": "head_injury",
+    
+    "pregnancy bleeding": "pregnancy",
+    "labour pain": "pregnancy",
+    "expecting": "pregnancy",
+    "pregnant": "pregnancy",
+    
+    "persistent crying": "pain_level_high",
+    
+    "sugar": "diabetes_history",
+    "bp": "hypertension_history",
+    "high blood pressure": "hypertension_history",
+    
+    "stomach ache": "abdominal_pain",
+    "throwing up": "vomiting",
+    "puking": "vomiting",
+    "nausea": "vomiting",
+    
+    "sore eyes": "eye_irritation",
+    "red eyes": "eye_irritation",
+    "earache": "ear_pain",
+    "throat hurts": "sore_throat",
+    "coughing": "cough",
+    "runny nose": "cold_symptoms",
+    "pee hurts": "urinary_symptoms",
+    "allergy": "allergic_reaction_severe",
+    "swollen": "allergic_reaction_severe",
+    "seizures": "seizure",
+    "fit": "seizure",
+    "fits": "seizure",
+    "fainted": "fainting",
+    "dizzy": "dizziness"
+  }
+}
