@@ -15,7 +15,7 @@ from aarogyaq.models import Patient, PatientCreate
 import json
 from datetime import datetime
 from sqlalchemy.orm import Session
-from aarogyaq.models import Patient, Visit, AuditLog
+from aarogyaq.models import Patient, Visit, AuditLog, Vitals
 from aarogyaq.audit import log_event
 
 def generate_patient_id(db: Session) -> str:
@@ -36,11 +36,12 @@ def register_patient(
     chief_complaint: str,
     pain_level: int,
     symptom_duration: int | None,
-    existing_conditions: list[str]
+    existing_conditions: list[str],
+    vitals_data: dict | None = None
 ) -> tuple[Patient, Visit]:
     """
     Create and persist a Patient (or retrieve existing by phone if phone
-    is provided and already on record) and a new Visit.
+    is provided and already on record) and a new Visit, including Vitals if provided.
     Rules:
     - age must be 0-120, raise ValueError if outside range
     - pain_level must be 1-10, raise ValueError if outside range
@@ -89,6 +90,19 @@ def register_patient(
     )
     db.add(visit)
     db.flush()
+
+    if vitals_data:
+        vitals = Vitals(
+            visit_id=visit.visit_id,
+            heart_rate=vitals_data.get("heart_rate"),
+            systolic_bp=vitals_data.get("systolic_bp"),
+            diastolic_bp=vitals_data.get("diastolic_bp"),
+            respiratory_rate=vitals_data.get("respiratory_rate"),
+            spo2=vitals_data.get("spo2"),
+            temperature=vitals_data.get("temperature"),
+        )
+        db.add(vitals)
+        db.flush()
 
     log_event(db, actor="nurse", action="REGISTERED", visit_id=visit.visit_id)
 

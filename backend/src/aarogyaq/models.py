@@ -108,11 +108,17 @@ class Visit(Base):
     department_assigned = sa.Column(sa.String,   nullable=True)
     attended_at         = sa.Column(sa.DateTime, nullable=True)
     completed_at        = sa.Column(sa.DateTime, nullable=True)
+    bed_assigned        = sa.Column(sa.String,   nullable=True)
 
     patient        = relationship("Patient",       back_populates="visits")
     assessments    = relationship("Assessment",    back_populates="visit")
     doctor_summary = relationship("DoctorSummary", back_populates="visit", uselist=False)
     audit_logs     = relationship("AuditLog",      back_populates="visit")
+    vitals         = relationship("Vitals",        back_populates="visit", uselist=False)
+    clinical_notes = relationship("ClinicalNote",  back_populates="visit")
+    medication_orders = relationship("MedicationOrder", back_populates="visit")
+    laboratory_orders = relationship("LabOrder",   back_populates="visit")
+    radiology_orders = relationship("RadiologyOrder", back_populates="visit")
 
     def __repr__(self) -> str:
         return (
@@ -229,6 +235,82 @@ class Department(Base):
         )
 
 
+class Vitals(Base):
+    """ORM model for the ``vitals`` table."""
+    __tablename__ = "vitals"
+
+    vital_id         = sa.Column(sa.Integer, primary_key=True, autoincrement=True)
+    visit_id         = sa.Column(sa.Integer, sa.ForeignKey("visits.visit_id"), nullable=False, unique=True)
+    heart_rate       = sa.Column(sa.Integer, nullable=True)
+    systolic_bp      = sa.Column(sa.Integer, nullable=True)
+    diastolic_bp     = sa.Column(sa.Integer, nullable=True)
+    respiratory_rate = sa.Column(sa.Integer, nullable=True)
+    spo2             = sa.Column(sa.Integer, nullable=True)
+    temperature      = sa.Column(sa.Float,   nullable=True)
+    logged_at        = sa.Column(sa.DateTime, nullable=False, default=datetime.utcnow)
+
+    visit = relationship("Visit", back_populates="vitals")
+
+
+class ClinicalNote(Base):
+    """ORM model for the ``clinical_notes`` table."""
+    __tablename__ = "clinical_notes"
+
+    note_id   = sa.Column(sa.Integer, primary_key=True, autoincrement=True)
+    visit_id  = sa.Column(sa.Integer, sa.ForeignKey("visits.visit_id"), nullable=False)
+    author    = sa.Column(sa.String,  nullable=False)
+    note      = sa.Column(sa.Text,    nullable=False)
+    timestamp = sa.Column(sa.DateTime, nullable=False, default=datetime.utcnow)
+
+    visit = relationship("Visit", back_populates="clinical_notes")
+
+
+class MedicationOrder(Base):
+    """ORM model for the ``medication_orders`` table."""
+    __tablename__ = "medication_orders"
+
+    order_id  = sa.Column(sa.Integer, primary_key=True, autoincrement=True)
+    visit_id  = sa.Column(sa.Integer, sa.ForeignKey("visits.visit_id"), nullable=False)
+    doctor    = sa.Column(sa.String,  nullable=False)
+    name      = sa.Column(sa.String,  nullable=False)
+    dosage    = sa.Column(sa.String,  nullable=False)
+    frequency = sa.Column(sa.String,  nullable=False)
+    status    = sa.Column(sa.String,  nullable=False, default="Pending")
+    timestamp = sa.Column(sa.DateTime, nullable=False, default=datetime.utcnow)
+
+    visit = relationship("Visit", back_populates="medication_orders")
+
+
+class LabOrder(Base):
+    """ORM model for the ``laboratory_orders`` table."""
+    __tablename__ = "laboratory_orders"
+
+    order_id  = sa.Column(sa.Integer, primary_key=True, autoincrement=True)
+    visit_id  = sa.Column(sa.Integer, sa.ForeignKey("visits.visit_id"), nullable=False)
+    doctor    = sa.Column(sa.String,  nullable=False)
+    test_name = sa.Column(sa.String,  nullable=False)
+    status    = sa.Column(sa.String,  nullable=False, default="Ordered")
+    result    = sa.Column(sa.Text,    nullable=True)
+    timestamp = sa.Column(sa.DateTime, nullable=False, default=datetime.utcnow)
+
+    visit = relationship("Visit", back_populates="laboratory_orders")
+
+
+class RadiologyOrder(Base):
+    """ORM model for the ``radiology_orders`` table."""
+    __tablename__ = "radiology_orders"
+
+    order_id  = sa.Column(sa.Integer, primary_key=True, autoincrement=True)
+    visit_id  = sa.Column(sa.Integer, sa.ForeignKey("visits.visit_id"), nullable=False)
+    doctor    = sa.Column(sa.String,  nullable=False)
+    scan_type = sa.Column(sa.String,  nullable=False)
+    status    = sa.Column(sa.String,  nullable=False, default="Ordered")
+    result    = sa.Column(sa.Text,    nullable=True)
+    timestamp = sa.Column(sa.DateTime, nullable=False, default=datetime.utcnow)
+
+    visit = relationship("Visit", back_populates="radiology_orders")
+
+
 # ── Pydantic input schemas ────────────────────────────────────────────────────
 
 class PatientCreate(BaseModel):
@@ -282,6 +364,57 @@ class PatientOut(BaseModel):
     created_at: datetime
 
 
+class VitalsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    vital_id:         int
+    visit_id:         int
+    heart_rate:       int | None
+    systolic_bp:      int | None
+    diastolic_bp:     int | None
+    respiratory_rate: int | None
+    spo2:             int | None
+    temperature:      float | None
+    logged_at:        datetime
+
+class ClinicalNoteOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    note_id:   int
+    visit_id:  int
+    author:    str
+    note:      str
+    timestamp: datetime
+
+class MedicationOrderOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    order_id:  int
+    visit_id:  int
+    doctor:    str
+    name:      str
+    dosage:    str
+    frequency: str
+    status:    str
+    timestamp: datetime
+
+class LabOrderOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    order_id:  int
+    visit_id:  int
+    doctor:    str
+    test_name: str
+    status:    str
+    result:    str | None
+    timestamp: datetime
+
+class RadiologyOrderOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    order_id:  int
+    visit_id:  int
+    doctor:    str
+    scan_type: str
+    status:    str
+    result:    str | None
+    timestamp: datetime
+
 class VisitOut(BaseModel):
     """Response schema for visit records — all visit fields.
 
@@ -301,9 +434,15 @@ class VisitOut(BaseModel):
     existing_conditions: list[str]
     queue_type:          str
     status:              str
-    department_assigned: str | None
-    attended_at:         datetime | None
-    completed_at:        datetime | None
+    department_assigned: str | None = None
+    bed_assigned:        str | None = None
+    attended_at:         datetime | None = None
+    completed_at:        datetime | None = None
+    vitals:              VitalsOut | None = None
+    clinical_notes:      list[ClinicalNoteOut] = Field(default_factory=list)
+    medication_orders:   list[MedicationOrderOut] = Field(default_factory=list)
+    laboratory_orders:   list[LabOrderOut] = Field(default_factory=list)
+    radiology_orders:    list[RadiologyOrderOut] = Field(default_factory=list)
 
 
 class AssessmentOut(BaseModel):

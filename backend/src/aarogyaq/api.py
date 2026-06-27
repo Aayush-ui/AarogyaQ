@@ -29,6 +29,14 @@ async def generic_error_handler(request: Request, exc: Exception):
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 # Request Models
+class VitalsPayload(BaseModel):
+    heart_rate: Optional[int] = None
+    systolic_bp: Optional[int] = None
+    diastolic_bp: Optional[int] = None
+    respiratory_rate: Optional[int] = None
+    spo2: Optional[int] = None
+    temperature: Optional[float] = None
+
 class RegisterRequest(BaseModel):
     name: str
     age: int
@@ -37,7 +45,8 @@ class RegisterRequest(BaseModel):
     chief_complaint: str
     pain_level: int
     symptom_duration: Optional[int] = None
-    existing_conditions: List[str]
+    symptoms: List[str] = []
+    vitals: Optional[VitalsPayload] = None
     use_ai: bool = False
 
 class ReassessRequest(BaseModel):
@@ -56,7 +65,7 @@ class DeptStatusPatch(BaseModel):
 import json
 
 def visit_to_dict(v: Visit) -> dict:
-    return {
+    res = {
         "visit_id": v.visit_id,
         "patient_id": v.patient_id,
         "visit_timestamp": v.visit_timestamp,
@@ -67,9 +76,34 @@ def visit_to_dict(v: Visit) -> dict:
         "queue_type": v.queue_type,
         "status": v.status,
         "department_assigned": v.department_assigned,
+        "bed_assigned": getattr(v, "bed_assigned", None),
         "attended_at": v.attended_at,
-        "completed_at": v.completed_at
+        "completed_at": v.completed_at,
+        "clinical_notes": [],
+        "medication_orders": [],
+        "laboratory_orders": [],
+        "radiology_orders": []
     }
+    if getattr(v, "vitals", None):
+        res["vitals"] = {
+            "vital_id": v.vitals.vital_id,
+            "heart_rate": v.vitals.heart_rate,
+            "systolic_bp": v.vitals.systolic_bp,
+            "diastolic_bp": v.vitals.diastolic_bp,
+            "respiratory_rate": v.vitals.respiratory_rate,
+            "spo2": v.vitals.spo2,
+            "temperature": v.vitals.temperature,
+            "logged_at": v.vitals.logged_at
+        }
+    if getattr(v, "clinical_notes", None):
+        res["clinical_notes"] = [{"note_id": n.note_id, "author": n.author, "note": n.note, "timestamp": n.timestamp} for n in v.clinical_notes]
+    if getattr(v, "medication_orders", None):
+        res["medication_orders"] = [{"order_id": m.order_id, "doctor": m.doctor, "name": m.name, "dosage": m.dosage, "frequency": m.frequency, "status": m.status, "timestamp": m.timestamp} for m in v.medication_orders]
+    if getattr(v, "laboratory_orders", None):
+        res["laboratory_orders"] = [{"order_id": l.order_id, "doctor": l.doctor, "test_name": l.test_name, "status": l.status, "result": l.result, "timestamp": l.timestamp} for l in v.laboratory_orders]
+    if getattr(v, "radiology_orders", None):
+        res["radiology_orders"] = [{"order_id": r.order_id, "doctor": r.doctor, "scan_type": r.scan_type, "status": r.status, "result": r.result, "timestamp": r.timestamp} for r in v.radiology_orders]
+    return res
 
 def assessment_to_dict(a) -> dict:
     return {
@@ -90,6 +124,7 @@ def assessment_to_dict(a) -> dict:
 # Routes
 @router.post("/patients/register", status_code=201)
 async def register(data: RegisterRequest, db: Session = Depends(get_db)):
+    vitals_data = data.vitals.model_dump() if data.vitals else None
     p, v = register_patient(
         db, 
         name=data.name, 
@@ -99,7 +134,8 @@ async def register(data: RegisterRequest, db: Session = Depends(get_db)):
         chief_complaint=data.chief_complaint, 
         pain_level=data.pain_level, 
         symptom_duration=data.symptom_duration, 
-        existing_conditions=data.existing_conditions
+        existing_conditions=data.symptoms,
+        vitals_data=vitals_data
     )
     return assess_patient(db, v.visit_id, data.use_ai)
 
