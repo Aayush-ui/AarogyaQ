@@ -7,7 +7,7 @@ from datetime import datetime
 import logging
 
 from aarogyaq.database import get_db
-from aarogyaq.models import VisitOut, AssessmentOut, DepartmentOut, Visit, Department, Patient
+from aarogyaq.models import VisitOut, AssessmentOut, DepartmentOut, Visit, Department, Patient, ClinicalNote, MedicationOrder, LabOrder, RadiologyOrder
 from aarogyaq.patient_intake import register_patient
 from aarogyaq.orchestrator import assess_patient, reassess_patient
 from aarogyaq.queue_manager import get_emergency_queue, get_general_queue, get_stale_patients, update_visit_status
@@ -60,6 +60,30 @@ class VisitStatusPatch(BaseModel):
 
 class DeptStatusPatch(BaseModel):
     status: str
+
+class ClinicalNoteRequest(BaseModel):
+    author: str
+    note: str
+
+class MedicationOrderRequest(BaseModel):
+    doctor: str
+    name: str
+    dosage: str
+    frequency: str
+
+class LabOrderRequest(BaseModel):
+    doctor: str
+    test_name: str
+
+class RadiologyOrderRequest(BaseModel):
+    doctor: str
+    scan_type: str
+
+class BedAssignmentPatch(BaseModel):
+    bed: str
+
+class DepartmentTransferPatch(BaseModel):
+    department: str
 
 # Helpers
 import json
@@ -190,6 +214,64 @@ async def patch_visit_status(visit_id: int, data: VisitStatusPatch, db: Session 
         raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+@router.post("/visits/{visit_id}/notes", status_code=201)
+async def add_clinical_note(visit_id: int, data: ClinicalNoteRequest, db: Session = Depends(get_db)):
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(status_code=422, detail="Visit not found")
+    note = ClinicalNote(visit_id=visit_id, author=data.author, note=data.note)
+    db.add(note)
+    db.flush()
+    return {"status": "success"}
+
+@router.post("/visits/{visit_id}/medications", status_code=201)
+async def add_medication_order(visit_id: int, data: MedicationOrderRequest, db: Session = Depends(get_db)):
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(status_code=422, detail="Visit not found")
+    order = MedicationOrder(visit_id=visit_id, doctor=data.doctor, name=data.name, dosage=data.dosage, frequency=data.frequency)
+    db.add(order)
+    db.flush()
+    return {"status": "success"}
+
+@router.post("/visits/{visit_id}/labs", status_code=201)
+async def add_lab_order(visit_id: int, data: LabOrderRequest, db: Session = Depends(get_db)):
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(status_code=422, detail="Visit not found")
+    order = LabOrder(visit_id=visit_id, doctor=data.doctor, test_name=data.test_name)
+    db.add(order)
+    db.flush()
+    return {"status": "success"}
+
+@router.post("/visits/{visit_id}/radiology", status_code=201)
+async def add_radiology_order(visit_id: int, data: RadiologyOrderRequest, db: Session = Depends(get_db)):
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(status_code=422, detail="Visit not found")
+    order = RadiologyOrder(visit_id=visit_id, doctor=data.doctor, scan_type=data.scan_type)
+    db.add(order)
+    db.flush()
+    return {"status": "success"}
+
+@router.patch("/visits/{visit_id}/bed")
+async def assign_bed(visit_id: int, data: BedAssignmentPatch, db: Session = Depends(get_db)):
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(status_code=422, detail="Visit not found")
+    visit.bed_assigned = data.bed
+    db.flush()
+    return {"status": "success"}
+
+@router.patch("/visits/{visit_id}/transfer")
+async def transfer_department(visit_id: int, data: DepartmentTransferPatch, db: Session = Depends(get_db)):
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(status_code=422, detail="Visit not found")
+    visit.department_assigned = data.department
+    db.flush()
+    return {"status": "success"}
 
 @router.post("/visits/{visit_id}/reassess")
 async def reassess(visit_id: int, data: ReassessRequest, db: Session = Depends(get_db)):
