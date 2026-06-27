@@ -12,9 +12,20 @@ from aarogyaq.patient_intake import register_patient
 from aarogyaq.orchestrator import assess_patient, reassess_patient
 from aarogyaq.queue_manager import get_emergency_queue, get_general_queue, get_stale_patients, update_visit_status
 
+from fastapi.middleware.cors import CORSMiddleware
+
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="AarogyaQ API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 router = APIRouter()
 
 # Exception Handlers
