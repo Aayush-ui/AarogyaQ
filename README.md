@@ -4,7 +4,6 @@
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
   [![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=flat&logo=fastapi)](https://fastapi.tiangolo.com/)
-  [![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=flat&logo=streamlit&logoColor=white)](https://streamlit.io/)
   [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
 </div>
 
@@ -39,13 +38,13 @@ The backend is a robust Python package powered by **FastAPI** and **SQLAlchemy (
 👉 **[Read the full Backend Documentation here](backend/docs/README.md)**
 
 ### 🖥️ Frontend Responsibilities (`frontend/`)
-The frontend is a dynamic, clinician-facing interface built with **Streamlit**.
+The frontend is a dynamic, clinician-facing interface built with **React** (currently in development).
 
 * 📝 **Patient Intake**: Provides clean forms for registration and vitals entry.
 * 📊 **Live Dashboard**: Displays real-time triage queues, intelligently sorted by priority tier and wait time SLA.
 * 🩺 **Clinical Summaries**: Presents individual patient profiles, detailing rule-engine rationale and AI-generated narratives for rapid context acquisition.
 
-> **⚠ Strict Architectural Rule:** The `frontend/` **never imports backend modules directly.** All communication between the frontend and backend is executed exclusively via HTTP requests to the FastAPI endpoints.
+> **⚠ Strict Architectural Rule:** The frontend **never imports backend modules directly.** All communication between the frontend and backend is executed exclusively via HTTP requests to the FastAPI endpoints.
 
 ---
 
@@ -62,7 +61,7 @@ pip install -e backend/
 uvicorn aarogyaq.api:app --reload
 
 # 3. Start the Frontend Application (In a separate terminal)
-streamlit run frontend/app.py
+# Note: React frontend setup instructions to be added once available.
 ```
 
 ---

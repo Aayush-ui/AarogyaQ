@@ -61,7 +61,8 @@ async def test_get_emergency_queue():
     assert res.status_code == 200
     data = res.json()
     assert len(data) > 0
-    assert "assessment_id" in data[0]
+    assert "patient" in data[0]
+    assert "visit" in data[0]
 
 @pytest.mark.asyncio
 async def test_patch_visit_status(test_db):

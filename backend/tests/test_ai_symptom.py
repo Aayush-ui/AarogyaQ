@@ -26,7 +26,7 @@ def test_use_ai_mock_success(mock_post):
     # use_ai=True: MOCK the Ollama HTTP call
     mock_response = Mock()
     mock_response.json.return_value = {
-        "response": '{"findings": {"head_injury": true, "fake_term": true}, "confidence": {"head_injury": 0.95, "fake_term": 0.9}}'
+        "response": '{"normalized_symptoms": ["head_injury", "fake_term"], "confidence_scores": {"head_injury": 0.95, "fake_term": 0.9}}'
     }
     mock_response.raise_for_status = Mock()
     mock_post.return_value = mock_response

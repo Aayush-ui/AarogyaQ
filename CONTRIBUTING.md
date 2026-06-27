@@ -10,11 +10,8 @@ cd backend
 pytest -q
 ```
 
-### Frontend Smoke Test
-```bash
-pip install -r frontend/requirements_frontend.txt
-python -c "import streamlit"
-```
+### Frontend Tests
+Instructions for running React frontend tests will be added soon.
 
 ## Code Style
 - Type hints and docstrings are **required** on all public functions.

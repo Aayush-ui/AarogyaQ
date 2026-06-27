@@ -11,8 +11,7 @@ ollama serve
 # In a new terminal window:
 python -c "from aarogyaq.database import init_db, seed_departments; init_db(); seed_departments()"
 uvicorn aarogyaq.api:app --reload
-# Frontend runs separately:
-streamlit run frontend/app.py
+# React Frontend (Setup instructions TBD)
 ```
 *(Note: `ollama serve` must be kept running in the background for AI features to work).*
 
