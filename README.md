@@ -11,13 +11,31 @@
 
 ## 📖 What is AarogyaQ?
 
-AarogyaQ is a **Clinical Decision Support System (CDSS)** designed specifically for hospital outpatient and emergency departments. It acts as an intelligent layer between patient intake and clinician care, ensuring that the most critical patients receive immediate attention.
+AarogyaQ is a **Clinical Decision Support System (CDSS)** and **Command Center** designed specifically for hospital outpatient and emergency departments. It acts as an intelligent, real-time layer between patient intake and clinician care, ensuring that the most critical patients receive immediate attention.
 
-It collects structured patient vitals and free-text symptom descriptions (including informal multi-lingual inputs), runs them through a highly deterministic clinical rule engine, and assigns a reproducible risk score and priority tier:
+It collects structured patient vitals and free-text symptom descriptions (supporting informal multilingual/Hinglish/Gujarati inputs), runs them through a highly deterministic clinical rule engine, and assigns a reproducible risk score and priority tier:
 
 🟢 **Low** &nbsp;|&nbsp; 🟡 **Medium** &nbsp;|&nbsp; 🟠 **High** &nbsp;|&nbsp; 🔴 **Critical**
 
-> **Note:** AarogyaQ is **not** a diagnosis engine — it never tells a patient what illness they have. Its sole purpose is to surface the right patients to the right care team at the right time, reducing missed deteriorations and queue bottlenecks.
+Beyond static scoring, AarogyaQ optimizes hospital operations via a **Reinforcement Learning (RL) agent** that dynamically adjusts priority thresholds to balance patient flow, and a **Digital Twin simulator** that predicts patient wait times and alerts clinicians to potential physiological deterioration.
+
+> **Note:** AarogyaQ is **not** a diagnosis engine — it never tells a patient what illness they have. Its sole purpose is to surface the right patients to the right care team at the right time, reducing missed deteriorations, mitigating bottlenecks, and maintaining wait-time SLAs.
+
+---
+
+## ✨ Core Features
+
+* **⚖️ Deterministic Clinical Rules Engine**: Evaluates 15+ complex clinical rules (such as cardiac distress, sepsis indicators, stroke symptoms) against vitals and complaints to calculate reproducible patient risk scores. Configured fully via `backend/config/clinical_rules.json`.
+* **🛑 Safety-Critical Business Overrides**: Implements high-priority overrides (e.g., pain score of 10, elderly cardiac presentation, severe pediatric neuro symptoms) that instantly override base scores to force immediate clinical escalation.
+* **🤖 Gated AI Integration**: Safely delegates language processing tasks to a local Ollama LLM (`llama3.1:8b`):
+  1. Standardizing informal, multilingual free-text complaints to canonical clinical symptoms (`ai_symptom.py`).
+  2. Generating clear clinical narrative summaries to speed up doctor hand-offs (`summary_gen.py`).
+* **🧠 Reinforcement Learning Optimization**: A Q-learning feedback agent (`rl_agent.py`) that monitors queue length and treatment latency to dynamically tune clinical triage boundaries, ensuring the department adapts to resource constraints without manual intervention.
+* **🔮 Predictive Digital Twin Simulation**: Simulates the active queue state machine (`digital_twin.py`) to estimate real-time projected wait times for each patient, monitoring deterioration risks if a patient sits too long in the queue.
+* **🖥️ Clinician-Specific Interfaces**: Tailored React dashboards for different roles:
+  * **Nurse Intake**: Direct vitals documentation, demographic registration, and symptom standardisation.
+  * **Doctor Workspace (CPOE)**: Comprehensive Physician order entry for clinical notes, medications, lab tests, radiology scans, and bed allocation.
+  * **Command Center & Admin**: Live operational queues, department capacity status controllers, and RL agent state visualization.
 
 ---
 
@@ -26,23 +44,20 @@ It collects structured patient vitals and free-text symptom descriptions (includ
 AarogyaQ is built with a strict separation of concerns between its API-driven backend and its interactive frontend.
 
 ### ⚙️ Backend Responsibilities (`backend/`)
-The backend is a robust Python package powered by **FastAPI** and **SQLAlchemy (SQLite)**. It is the absolute source of truth for all clinical logic and data persistence.
+The backend is a robust Python package powered by **FastAPI** and **SQLAlchemy (SQLite)**. It is the absolute source of truth for all clinical logic, intelligence agents, and data persistence.
 
-* 🔌 **REST API**: Exposes versioned endpoints (`/api/v1/…`) for patient registration, triage scoring, queue management, and audit trails.
-* 🧠 **Deterministic Rule Engine**: Converts patient data into reproducible priority tiers. The same input *always* produces the same output.
-* 🤖 **Optional AI Integrations**: Safely delegates **only two tasks** to a local Ollama LLM (`llama3.1:8b`):
-  1. Mapping informal, free-text symptoms to canonical clinical terms (`ai_symptom.py`).
-  2. Generating plain-language narrative summaries for clinicians (`summary_gen.py`).
-* 💾 **Data Persistence**: Stores all records securely in `backend/data/aarogyaq.db` using unified `ARQ-000001` format patient IDs.
+* 🔌 **REST API**: Exposes endpoints for patient registration, triage scoring, queue management, clinical notes, order entries, and audit trails.
+* 🧠 **RL Agent & Digital Twin**: Houses the state-machine modeling (`digital_twin.py`) and reinforcement learning logic (`rl_agent.py`).
+* 💾 **Data Persistence**: Stores records securely in `backend/data/aarogyaq.db` using unified `ARQ-000001` format patient IDs.
 
 👉 **[Read the full Backend Documentation here](backend/docs/README.md)**
 
 ### 🖥️ Frontend Responsibilities (`frontend/`)
-The frontend is a dynamic, clinician-facing interface built with **React** (currently in development).
+The frontend is a dynamic, high-density React application built with **React 19, TypeScript, Vite, Tailwind CSS v4, Motion, Recharts, and Zustand**.
 
-* 📝 **Patient Intake**: Provides clean forms for registration and vitals entry.
-* 📊 **Live Dashboard**: Displays real-time triage queues, intelligently sorted by priority tier and wait time SLA.
-* 🩺 **Clinical Summaries**: Presents individual patient profiles, detailing rule-engine rationale and AI-generated narratives for rapid context acquisition.
+* 📊 **Real-time Dashboards**: Interactive interfaces mapping active patient queues, live workload metrics, and departmental capacities.
+* 🩺 **Clinical Command Panel**: Clinical interfaces for order entries (medication, lab, radiology), patient transfers, bed assignments, and timeline audits.
+* 💾 **Hybrid API Adapter**: Integrates directly with the FastAPI endpoints, featuring a fallback to a fully operational local simulator (`simulatedDb.ts`) for standalone demonstration mode.
 
 > **⚠ Strict Architectural Rule:** The frontend **never imports backend modules directly.** All communication between the frontend and backend is executed exclusively via HTTP requests to the FastAPI endpoints.
 
