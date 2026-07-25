@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from datetime import datetime
 import json
+import logging
 
 from aarogyaq.models import Visit, Assessment, DoctorSummary
 from aarogyaq.patient_intake import get_patient
@@ -12,7 +13,9 @@ from aarogyaq.department import route_department
 from aarogyaq.summary_gen import generate_summary
 from aarogyaq.audit import write_log
 
-def assess_patient(db: Session, visit_id: int, use_ai: bool = False) -> dict:
+logger = logging.getLogger(__name__)
+
+def assess_patient(db: Session, visit_id: int, use_ai: bool = False, symptoms: list[str] | None = None) -> dict:
     # 1. Load visit from DB
     visit = db.query(Visit).filter(Visit.visit_id == visit_id).first()
     if not visit:
@@ -20,8 +23,9 @@ def assess_patient(db: Session, visit_id: int, use_ai: bool = False) -> dict:
         
     patient = get_patient(db, visit.patient_id)
     
-    # 2. Map symptoms
-    structured_findings, confidence_scores, flagged_terms = map_symptoms(visit.chief_complaint, use_ai=use_ai)
+    # 2. Map symptoms — prefer explicit symptoms list from the request; fall back to chief_complaint
+    symptom_text = ", ".join(symptoms) if symptoms else visit.chief_complaint
+    structured_findings, confidence_scores, flagged_terms = map_symptoms(symptom_text, use_ai=use_ai)
     mapped_symptoms = [k for k, v in structured_findings.items() if v]
     
     # 3. Evaluate clinical rules (Layer 1, 2, 3)
@@ -69,10 +73,18 @@ def assess_patient(db: Session, visit_id: int, use_ai: bool = False) -> dict:
         write_log(db, visit_id=visit_id, actor="system", action="RULE_FIRED", notes=f"Rule: {rule['rule_id']}")
         
     # 6. Assign queue
-    queue_type = assign_queue(db, visit_id, final_priority)
+    try:
+        queue_type = assign_queue(db, visit_id, final_priority)
+    except Exception as exc:
+        logger.error("assign_queue failed for visit %s: %s", visit_id, exc, exc_info=True)
+        raise
     
     # 7. Route department
-    dept_name, dept_status = route_department(mapped_symptoms, final_priority, patient.age, db)
+    try:
+        dept_name, dept_status = route_department(mapped_symptoms, final_priority, patient.age, db)
+    except Exception as exc:
+        logger.error("route_department failed for visit %s: %s", visit_id, exc, exc_info=True)
+        raise
     visit.department_assigned = dept_name
     db.flush()
     

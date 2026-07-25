@@ -1,0 +1,258 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Base custom styles */
+body {
+  background-color: #0A0C12; /* Clean Minimalism deep dark blue-black */
+  color: #E2E8F0; /* Clean Minimalism Slate-200 text */
+  font-family: var(--font-sans);
+}
+
+/* Theme specific utilities */
+.glass {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.critical-pulse {
+  box-shadow: 0 0 15px rgba(211, 47, 47, 0.3);
+  border-left: 4px solid #D32F2F !important;
+}
+
+.high-glow {
+  border-left: 4px solid #F57C00 !important;
+}
+
+.tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Custom scrollbar for clinical columns */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(10, 12, 18, 0.4);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* ==========================================================================
+   LIGHT MODE (CLEAN MINIMALISM) THEME OVERRIDES
+   These apply when class "dark" is NOT present on <html> (toggled to light)
+   ========================================================================== */
+html:not(.dark) {
+  --bg-primary: #f8fafc; /* Slate 50 background */
+  --bg-secondary: #ffffff; /* Pure white containers */
+  --bg-tertiary: #f1f5f9; /* Slate 100 inner containers */
+  --bg-nested: #e2e8f0; /* Slate 200 accents */
+  --border-primary: #e2e8f0; /* Slate 200 border */
+  --border-secondary: #f1f5f9; /* Slate 100 border */
+  --text-primary: #0f172a; /* Slate 900 text */
+  --text-secondary: #334155; /* Slate 700 text */
+  --text-muted: #64748b; /* Slate 500 text */
+  --shadow-custom: 0 4px 12px -1px rgba(15, 23, 42, 0.05), 0 2px 6px -2px rgba(15, 23, 42, 0.04);
+}
+
+html:not(.dark) body {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Global layout and navigation stage overrides */
+html:not(.dark) .bg-\[\#0A0C12\] {
+  background-color: var(--bg-primary) !important;
+}
+html:not(.dark) .bg-\[\#0D1017\] {
+  background-color: var(--bg-secondary) !important;
+}
+html:not(.dark) .bg-\[\#0D0F16\]\/90 {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+}
+html:not(.dark) .bg-\[\#0e1320\]\/80 {
+  background-color: rgba(248, 250, 252, 0.8) !important;
+}
+html:not(.dark) .bg-\[\#0E1320\] {
+  background-color: var(--bg-secondary) !important;
+}
+html:not(.dark) .bg-\[\#090d16\] {
+  background-color: var(--bg-tertiary) !important;
+}
+html:not(.dark) .bg-\[\#090c12\] {
+  background-color: var(--bg-tertiary) !important;
+}
+html:not(.dark) .bg-\[\#131823\] {
+  background-color: var(--bg-tertiary) !important;
+}
+html:not(.dark) .bg-\[\#131823\]\/50 {
+  background-color: rgba(241, 245, 249, 0.5) !important;
+}
+html:not(.dark) .bg-\[\#0c101a\]\/95 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+}
+html:not(.dark) .bg-\[\#0e1320\]\/95 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+}
+html:not(.dark) .bg-\[\#111624\] {
+  background-color: var(--bg-secondary) !important;
+}
+html:not(.dark) .bg-slate-900\/95 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+}
+html:not(.dark) .bg-zinc-950\/80 {
+  background-color: rgba(241, 245, 249, 0.9) !important;
+}
+
+/* Semi-transparent backgrounds */
+html:not(.dark) .bg-white\/5 {
+  background-color: rgba(15, 23, 42, 0.04) !important;
+}
+html:not(.dark) .hover\:bg-white\/5:hover {
+  background-color: rgba(15, 23, 42, 0.04) !important;
+}
+html:not(.dark) .hover\:bg-white\/10:hover {
+  background-color: rgba(15, 23, 42, 0.08) !important;
+}
+html:not(.dark) .bg-white\/\[0\.03\] {
+  background-color: rgba(15, 23, 42, 0.02) !important;
+}
+html:not(.dark) .bg-white\/\[0\.02\] {
+  background-color: rgba(15, 23, 42, 0.01) !important;
+}
+html:not(.dark) .bg-white\/10 {
+  background-color: rgba(15, 23, 42, 0.06) !important;
+}
+html:not(.dark) .bg-blue-500\/10 {
+  background-color: rgba(59, 130, 246, 0.08) !important;
+}
+html:not(.dark) .bg-green-500\/10 {
+  background-color: rgba(16, 185, 129, 0.08) !important;
+}
+html:not(.dark) .bg-red-500\/10 {
+  background-color: rgba(239, 68, 68, 0.08) !important;
+}
+html:not(.dark) .bg-amber-500\/10 {
+  background-color: rgba(245, 158, 11, 0.08) !important;
+}
+html:not(.dark) .bg-indigo-500\/10 {
+  background-color: rgba(99, 102, 241, 0.08) !important;
+}
+
+/* Borders */
+html:not(.dark) .border-white\/10 {
+  border-color: var(--border-primary) !important;
+}
+html:not(.dark) .border-white\/5 {
+  border-color: var(--border-secondary) !important;
+}
+html:not(.dark) .border-white\/\[0\.08\] {
+  border-color: var(--border-primary) !important;
+}
+html:not(.dark) .border-zinc-800 {
+  border-color: var(--border-primary) !important;
+}
+html:not(.dark) .border-\[\#212a44\] {
+  border-color: var(--border-primary) !important;
+}
+html:not(.dark) .border-blue-500\/20 {
+  border-color: rgba(59, 130, 246, 0.15) !important;
+}
+html:not(.dark) .border-green-500\/20 {
+  border-color: rgba(16, 185, 129, 0.15) !important;
+}
+html:not(.dark) .border-red-500\/20 {
+  border-color: rgba(239, 68, 68, 0.15) !important;
+}
+html:not(.dark) .border-amber-500\/20 {
+  border-color: rgba(245, 158, 11, 0.15) !important;
+}
+html:not(.dark) .border-indigo-500\/20 {
+  border-color: rgba(99, 102, 241, 0.15) !important;
+}
+
+/* Texts and Icons */
+html:not(.dark) .text-slate-100 {
+  color: var(--text-primary) !important;
+}
+html:not(.dark) .text-slate-200 {
+  color: var(--text-primary) !important;
+}
+html:not(.dark) .text-slate-300 {
+  color: var(--text-secondary) !important;
+}
+html:not(.dark) .text-slate-400 {
+  color: var(--text-muted) !important;
+}
+html:not(.dark) .text-slate-500 {
+  color: var(--text-muted) !important;
+}
+html:not(.dark) .text-slate-600 {
+  color: var(--text-muted) !important;
+}
+html:not(.dark) .text-zinc-400 {
+  color: var(--text-secondary) !important;
+}
+html:not(.dark) .hover\:text-white:hover {
+  color: var(--text-primary) !important;
+}
+html:not(.dark) .group-hover\:text-white:group-hover {
+  color: var(--text-primary) !important;
+}
+
+/* Navigation button overrides */
+html:not(.dark) aside button.text-white {
+  color: #3b82f6 !important; /* Medical blue highlight */
+}
+html:not(.dark) aside button.text-white div {
+  color: #3b82f6 !important;
+}
+
+/* Card and container shadows */
+html:not(.dark) .shadow-md,
+html:not(.dark) .shadow-lg,
+html:not(.dark) .shadow-2xl {
+  box-shadow: var(--shadow-custom) !important;
+}
+
+/* SVG Line paths */
+html:not(.dark) .stroke-white {
+  stroke: var(--text-primary) !important;
+}
+
+/* Additional elements */
+html:not(.dark) select {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+}
+html:not(.dark) select option {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+}
+html:not(.dark) input {
+  color: var(--text-primary) !important;
+}
+html:not(.dark) input::placeholder {
+  color: var(--text-muted) !important;
+}
+

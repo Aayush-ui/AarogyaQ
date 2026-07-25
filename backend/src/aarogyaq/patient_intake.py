@@ -7,16 +7,14 @@ event via :mod:`aarogyaq.audit`.
 """
 from __future__ import annotations
 
-from sqlalchemy.orm import Session
-
-from aarogyaq.models import Patient, PatientCreate
-
-
 import json
+import logging
 from datetime import datetime
 from sqlalchemy.orm import Session
-from aarogyaq.models import Patient, Visit, AuditLog, Vitals
+from aarogyaq.models import Patient, PatientCreate, Visit, AuditLog, Vitals
 from aarogyaq.audit import log_event
+
+logger = logging.getLogger(__name__)
 
 def generate_patient_id(db: Session) -> str:
     """Generate next ID in format ARQ-000001.
@@ -84,12 +82,19 @@ def register_patient(
         pain_level=pain_level,
         symptom_duration=symptom_duration,
         existing_conditions=json.dumps(existing_conditions),
-        queue_type="Unknown",
+        # FIX: "Unknown" was an invalid placeholder; "General" is a valid queue type.
+        # assign_queue() in orchestrator.py will overwrite this with the correct
+        # value (Emergency or General) within the same transaction.
+        queue_type="General",
         status="Waiting",
         visit_timestamp=datetime.utcnow()
     )
     db.add(visit)
-    db.flush()
+    try:
+        db.flush()
+    except Exception as exc:
+        logger.error("Failed to flush visit for patient %s: %s", patient.patient_id, exc, exc_info=True)
+        raise
 
     if vitals_data:
         vitals = Vitals(

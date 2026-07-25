@@ -5,12 +5,19 @@ from typing import List, Optional, Any
 from sqlalchemy.orm import Session
 from datetime import datetime
 import logging
+import json
 
 from aarogyaq.database import get_db
 from aarogyaq.models import VisitOut, AssessmentOut, DepartmentOut, Visit, Department, Patient, ClinicalNote, MedicationOrder, LabOrder, RadiologyOrder
 from aarogyaq.patient_intake import register_patient
 from aarogyaq.orchestrator import assess_patient, reassess_patient
 from aarogyaq.queue_manager import get_emergency_queue, get_general_queue, get_stale_patients, update_visit_status
+from aarogyaq.digital_twin import compute_twin_state, TwinState
+from aarogyaq.rl_agent import (
+    load_agent, save_agent, make_state_key, select_action,
+    compute_reward, update_qtable, apply_threshold_offset,
+    get_adjusted_thresholds, ACTIONS,
+)
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -56,7 +63,8 @@ class RegisterRequest(BaseModel):
     chief_complaint: str
     pain_level: int
     symptom_duration: Optional[int] = None
-    symptoms: List[str] = []
+    symptoms: List[str] = []                   # current presenting symptoms (used by AI mapper)
+    existing_conditions: List[str] = []        # pre-existing medical history (e.g. Diabetes, Hypertension)
     vitals: Optional[VitalsPayload] = None
     use_ai: bool = False
 
@@ -96,8 +104,15 @@ class BedAssignmentPatch(BaseModel):
 class DepartmentTransferPatch(BaseModel):
     department: str
 
-# Helpers
-import json
+class RLFeedbackRequest(BaseModel):
+    """Manual RL feedback payload (auto-triggered on visit completion)."""
+    visit_id:          int
+    priority_level:    str
+    queue_type:        str
+    minutes_to_attend: int
+    queue_depth:       int = 0
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
 
 def visit_to_dict(v: Visit) -> dict:
     res = {
@@ -156,23 +171,64 @@ def assessment_to_dict(a) -> dict:
         "is_reassessment": a.is_reassessment
     }
 
+
+def twin_for_visit(v: Visit, assessment) -> dict | None:
+    """Compute Digital Twin state for a visit+assessment pair.
+
+    Returns a serialisable dict, or None if there is no assessment yet.
+    """
+    if assessment is None:
+        return None
+    try:
+        vitals_dict = None
+        if getattr(v, "vitals", None):
+            vitals_dict = {
+                "spo2":         v.vitals.spo2,
+                "heart_rate":   v.vitals.heart_rate,
+                "systolic_bp":  v.vitals.systolic_bp,
+            }
+        existing = json.loads(v.existing_conditions) if v.existing_conditions else []
+        state: TwinState = compute_twin_state(
+            visit_id=v.visit_id,
+            visit_timestamp=v.visit_timestamp,
+            initial_risk_score=float(assessment.risk_score),
+            initial_priority=assessment.priority_level,
+            age=v.patient.age,
+            existing_conditions=existing,
+            vitals=vitals_dict,
+        )
+        return {
+            "visit_id":             state.visit_id,
+            "initial_risk_score":   state.initial_risk_score,
+            "projected_risk_score": state.projected_risk_score,
+            "twin_priority":        state.twin_priority,
+            "deterioration_rate":   state.deterioration_rate,
+            "minutes_waiting":      state.minutes_waiting,
+            "alert_level":          state.alert_level,
+            "alert_reasons":        state.alert_reasons,
+            "computed_at":          state.computed_at,
+        }
+    except Exception as exc:
+        logger.warning("Digital twin computation failed for visit %s: %s", v.visit_id, exc)
+        return None
+
 # Routes
 @router.post("/patients/register", status_code=201)
 async def register(data: RegisterRequest, db: Session = Depends(get_db)):
     vitals_data = data.vitals.model_dump() if data.vitals else None
     p, v = register_patient(
-        db, 
-        name=data.name, 
-        age=data.age, 
-        gender=data.gender, 
-        phone=data.phone, 
-        chief_complaint=data.chief_complaint, 
-        pain_level=data.pain_level, 
-        symptom_duration=data.symptom_duration, 
-        existing_conditions=data.symptoms,
-        vitals_data=vitals_data
+        db,
+        name=data.name,
+        age=data.age,
+        gender=data.gender,
+        phone=data.phone,
+        chief_complaint=data.chief_complaint,
+        pain_level=data.pain_level,
+        symptom_duration=data.symptom_duration,
+        existing_conditions=data.existing_conditions,  # FIX: was data.symptoms (wrong field)
+        vitals_data=vitals_data,
     )
-    return assess_patient(db, v.visit_id, data.use_ai)
+    return assess_patient(db, v.visit_id, data.use_ai, symptoms=data.symptoms)
 
 @router.get("/queue/emergency")
 async def get_emergency(db: Session = Depends(get_db)):
@@ -181,10 +237,11 @@ async def get_emergency(db: Session = Depends(get_db)):
     for v in visits:
         latest = max(v.assessments, key=lambda a: a.assessment_id) if v.assessments else None
         res.append({
-            "patient": {"patient_id": v.patient.patient_id, "name": v.patient.name, "age": v.patient.age, "gender": v.patient.gender},
-            "visit": visit_to_dict(v),
+            "patient":    {"patient_id": v.patient.patient_id, "name": v.patient.name, "age": v.patient.age, "gender": v.patient.gender},
+            "visit":      visit_to_dict(v),
             "assessment": assessment_to_dict(latest) if latest else {},
-            "summary": {"summary_text": v.doctor_summary.summary_text} if v.doctor_summary else {}
+            "summary":    {"summary_text": v.doctor_summary.summary_text} if v.doctor_summary else {},
+            "twin":       twin_for_visit(v, latest),
         })
     return res
 
@@ -195,10 +252,11 @@ async def get_general(db: Session = Depends(get_db)):
     for v in visits:
         latest = max(v.assessments, key=lambda a: a.assessment_id) if v.assessments else None
         res.append({
-            "patient": {"patient_id": v.patient.patient_id, "name": v.patient.name, "age": v.patient.age, "gender": v.patient.gender},
-            "visit": visit_to_dict(v),
+            "patient":    {"patient_id": v.patient.patient_id, "name": v.patient.name, "age": v.patient.age, "gender": v.patient.gender},
+            "visit":      visit_to_dict(v),
             "assessment": assessment_to_dict(latest) if latest else {},
-            "summary": {"summary_text": v.doctor_summary.summary_text} if v.doctor_summary else {}
+            "summary":    {"summary_text": v.doctor_summary.summary_text} if v.doctor_summary else {},
+            "twin":       twin_for_visit(v, latest),
         })
     return res
 
@@ -209,12 +267,26 @@ async def get_stale(db: Session = Depends(get_db)):
     for v in visits:
         latest = max(v.assessments, key=lambda a: a.assessment_id) if v.assessments else None
         res.append({
-            "patient": {"patient_id": v.patient.patient_id, "name": v.patient.name, "age": v.patient.age, "gender": v.patient.gender},
-            "visit": visit_to_dict(v),
+            "patient":    {"patient_id": v.patient.patient_id, "name": v.patient.name, "age": v.patient.age, "gender": v.patient.gender},
+            "visit":      visit_to_dict(v),
             "assessment": assessment_to_dict(latest) if latest else {},
-            "summary": {"summary_text": v.doctor_summary.summary_text} if v.doctor_summary else {}
+            "summary":    {"summary_text": v.doctor_summary.summary_text} if v.doctor_summary else {},
+            "twin":       twin_for_visit(v, latest),
         })
     return res
+
+
+@router.get("/visits/{visit_id}/twin")
+async def get_twin_state(visit_id: int, db: Session = Depends(get_db)):
+    """Return the Digital Twin projected state for a single visit."""
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(status_code=404, detail=f"Visit {visit_id} not found")
+    latest = max(visit.assessments, key=lambda a: a.assessment_id) if visit.assessments else None
+    twin = twin_for_visit(visit, latest)
+    if twin is None:
+        raise HTTPException(status_code=404, detail="No assessment found for this visit — twin unavailable")
+    return twin
 
 @router.patch("/visits/{visit_id}/status", response_model=VisitOut)
 async def patch_visit_status(visit_id: int, data: VisitStatusPatch, db: Session = Depends(get_db)):
@@ -339,5 +411,67 @@ async def get_departments_list(db: Session = Depends(get_db)):
 @router.get("/health")
 async def health():
     return {"status": "ok", "db": "connected"}
+
+
+# ── Reinforcement Learning endpoints ────────────────────────────────────────
+
+@router.post("/rl/feedback", status_code=200)
+async def rl_feedback(data: RLFeedbackRequest):
+    """Record a patient outcome and update the RL agent Q-table.
+
+    Called automatically when a visit status is set to Completed, or can
+    be triggered manually for replay/testing.
+    """
+    agent = load_agent()
+    state_key = make_state_key(
+        queue_type=data.queue_type,
+        queue_depth=data.queue_depth,
+    )
+    # Select the action the agent would have taken in this state
+    action_idx = select_action(agent, state_key)
+    reward = compute_reward(data.priority_level, data.minutes_to_attend)
+
+    update_qtable(agent, state_key, action_idx, reward)
+    apply_threshold_offset(agent, data.queue_type, action_idx)
+    save_agent(agent)
+
+    return {
+        "status":         "updated",
+        "episodes":       agent.episodes,
+        "reward":         reward,
+        "action":         ACTIONS[action_idx],
+        "epsilon":        round(agent.epsilon, 4),
+        "offsets":        agent.threshold_offsets,
+    }
+
+
+@router.get("/rl/state")
+async def rl_state():
+    """Return the complete RL agent state for the dashboard."""
+    agent = load_agent()
+    return {
+        "version":           agent.version,
+        "epsilon":           round(agent.epsilon, 4),
+        "episodes":          agent.episodes,
+        "threshold_offsets": agent.threshold_offsets,
+        "qtable_size":       len(agent.qtable),
+        "actions":           ACTIONS,
+        "qtable_preview":    {
+            k: [round(v, 4) for v in vals]
+            for k, vals in list(agent.qtable.items())[:10]   # first 10 states
+        },
+    }
+
+
+@router.get("/rl/thresholds")
+async def rl_thresholds():
+    """Return RL-adjusted priority score thresholds for both queue types."""
+    agent = load_agent()
+    return {
+        "Emergency": get_adjusted_thresholds("Emergency", agent),
+        "General":   get_adjusted_thresholds("General",   agent),
+        "offsets":   agent.threshold_offsets,
+    }
+
 
 app.include_router(router)

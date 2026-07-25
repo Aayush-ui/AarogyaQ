@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "epsilon": 0.2,
+  "episodes": 0,
+  "qtable": {},
+  "threshold_offsets": {
+    "Emergency": 0,
+    "General": 0
+  }
+}

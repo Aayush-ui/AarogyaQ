@@ -1,0 +1,6 @@
+{
+  "name": "AarogyaQ",
+  "description": "Premium clinical AI triage system and emergency flow dashboard tracker",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,37 @@
+========================================================================
+                      AarogyaQ Clinical Gateway
+                       Demo Security Credentials
+========================================================================
+
+Use any of the following clinician profiles to access the emergency
+decision suite. Each profile loads a dedicated viewport optimized for 
+their clinical workflows.
+
+------------------------------------------------------------------------
+1. IT Administrator
+------------------------------------------------------------------------
+Role ID:      admin
+Security Key: admin123
+Purpose:      Complete system control panel, telemetry simulation, 
+              and physical unit logs.
+
+------------------------------------------------------------------------
+2. Triage Intake Nurse
+------------------------------------------------------------------------
+Role ID:      nurse
+Security Key: nurse123
+Purpose:      Clinician triage form, vital sign logs, pain score matrix,
+              and instant neural acuity scoring.
+
+------------------------------------------------------------------------
+3. Emergency Physician
+------------------------------------------------------------------------
+Role ID:      doctor
+Security Key: doctor123
+Purpose:      EHR medication order entry, active patient diagnostics, 
+              care management plans, and laboratory dispatch.
+
+========================================================================
+Note: In accordance with hospital simulated safety standards, all 
+credentials are encrypted during transit to maintain HL7/HIPAA compliance.
+========================================================================
