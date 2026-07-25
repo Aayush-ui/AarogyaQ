@@ -47,3 +47,35 @@ yarn-error.log*
 # Database
 aarogyaq.db
 *.db
+*.db-shm
+*.db-wal
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+
+# Coverage / Testing
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Type checkers
+.mypy_cache/
+.pytype/
+
+# Secrets / Env overrides
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
