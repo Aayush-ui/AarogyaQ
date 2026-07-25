@@ -50,19 +50,78 @@ The frontend is a dynamic, clinician-facing interface built with **React** (curr
 
 ## 🚀 Getting Started
 
-Please see the [Backend Documentation](backend/docs/README.md) for detailed installation instructions, API endpoint references, and clinical/business rule configurations.
+To run AarogyaQ locally, follow these steps to set up both the backend and frontend.
 
-### Quick Start (Development)
+### Prerequisites
+Before starting, ensure you have the following installed:
+* **Python 3.11+**
+* **Node.js (v18+) & npm**
+* **Ollama** (optional, for local clinical AI summarization and symptom mapping)
+
+---
+
+### Step-by-Step Setup
+
+#### 1. Backend Setup & Run
+Open a terminal and navigate to the backend directory:
 ```bash
-# 1. Install Backend
-pip install -e backend/
+# Navigate to the backend directory
+cd backend
 
-# 2. Start the Backend Server
+# Create and activate a Python virtual environment
+python -m venv venv
+# On Windows:
+.\venv\Scripts\activate
+# On macOS/Linux:
+source venv/bin/activate
+
+# Install the backend package in editable mode with development dependencies
+pip install -e .[dev]
+
+# Initialize and seed the SQLite database
+python -c "from aarogyaq.database import init_db, seed_departments; init_db(); seed_departments()"
+
+# Start the FastAPI server
 uvicorn aarogyaq.api:app --reload
-
-# 3. Start the Frontend Application (In a separate terminal)
-# Note: React frontend setup instructions to be added once available.
 ```
+The backend API will be available at [http://localhost:8000](http://localhost:8000). You can explore the interactive Swagger documentation at [http://localhost:8000/docs](http://localhost:8000/docs).
+
+#### 2. Frontend Setup & Run
+Open a second terminal window/tab:
+```bash
+# Navigate to the frontend directory
+cd frontend
+
+# Install Node dependencies
+npm install
+
+# Start the frontend dev server
+npm run dev
+```
+The React frontend will start and be accessible at [http://localhost:3000](http://localhost:3000) (or the port specified in your console).
+
+#### 3. AI Capabilities with Ollama (Optional)
+If you wish to use the local LLM integration for clinical summaries and chief complaint standardisation:
+```bash
+# Start the local Ollama service
+ollama serve
+
+# Pull the required clinical/reasoning model (in a separate terminal)
+ollama pull llama3.1
+```
+Make sure the local FastAPI server has access to the Ollama endpoint (default: `http://localhost:11434`).
+
+---
+
+## 🔍 Detailed Guides & References
+
+For comprehensive details on specific sub-components, configuration variables, database architecture, or testing protocols, refer to the individual documents:
+
+* 📖 **[Full Project Launch & Setup Guide](RUN_PROJECT.md)** - Detailed environment setups, port management, and advanced troubleshooting.
+* ⚙️ **[Backend Operations & Config Reference](backend/docs/README.md)** - Explains how to add new clinical/business rules dynamically via JSON, configure Ollama models, and review priority thresholds.
+* 💾 **[Database Architecture Design](backend/docs/DB_DESIGN.md)** - Detailed breakdown of schemas, patient indexing (unified `ARQ-000001` format), audit logs, and status state machines.
+* 🖥️ **[Frontend Architecture & Integration](frontend/README.md)** - Full clinician command center layout, Zustand stores structure, high-density visualization components, and integration parameters.
+
 
 ---
 
