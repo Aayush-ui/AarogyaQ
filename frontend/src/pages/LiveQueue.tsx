@@ -55,17 +55,37 @@ export const LiveQueue: React.FC = () => {
       result = result.filter((item) => item.assessment.priority_level === priorityFilter);
     }
 
+    // Helper to get active sorting values considering Digital Twin deterioration
+    const getActiveSortValues = (item: TriageQueueItem) => {
+      let priority = item.assessment.priority_level;
+      let riskScore = item.assessment.risk_score;
+
+      if (item.twin && (item.twin.alert_level === "DETERIORATING" || item.twin.alert_level === "CRITICAL_ALERT")) {
+        if (item.twin.twin_priority) {
+          priority = item.twin.twin_priority;
+        }
+        if (item.twin.projected_risk_score !== undefined) {
+          riskScore = item.twin.projected_risk_score;
+        }
+      }
+
+      return { priority, riskScore };
+    };
+
     // 3. Clinical Sort
     result.sort((a, b) => {
+      const aVals = getActiveSortValues(a);
+      const bVals = getActiveSortValues(b);
+
       // Sticky Critical Logic: If viewing 'All' priorities, Critical tier ALWAYS sticks to the absolute top
       if (priorityFilter === "All") {
-        const aCrit = a.assessment.priority_level === "Critical" ? 1 : 0;
-        const bCrit = b.assessment.priority_level === "Critical" ? 1 : 0;
+        const aCrit = aVals.priority === "Critical" ? 1 : 0;
+        const bCrit = bVals.priority === "Critical" ? 1 : 0;
         if (aCrit !== bCrit) return bCrit - aCrit; // push critical patients first
       }
 
       if (sortBy === "risk") {
-        return b.assessment.risk_score - a.assessment.risk_score;
+        return bVals.riskScore - aVals.riskScore;
       }
       if (sortBy === "pain") {
         return b.visit.pain_level - a.visit.pain_level;

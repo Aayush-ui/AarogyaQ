@@ -38,6 +38,55 @@ def assign_queue(db: Session, visit_id: int, priority_level: str) -> str:
     
     return queue_type
 
+def get_active_sort_keys(v: Visit) -> tuple[int, float]:
+    """Return a tuple (priority_sort_key, risk_score) for sorting.
+    If the patient is deteriorating or in critical alert, uses Digital Twin projections.
+    """
+    from aarogyaq.priority import priority_to_sort_key
+    
+    if not v.assessments:
+        return 3, 0.0
+        
+    latest = max(v.assessments, key=lambda a: a.assessment_id)
+    priority = latest.priority_level
+    risk_score = latest.risk_score
+    
+    try:
+        import json
+        from aarogyaq.digital_twin import compute_twin_state, TwinState
+        
+        vitals_dict = None
+        if getattr(v, "vitals", None):
+            vitals_dict = {
+                "spo2":         v.vitals.spo2,
+                "heart_rate":   v.vitals.heart_rate,
+                "systolic_bp":  v.vitals.systolic_bp,
+            }
+        existing = json.loads(v.existing_conditions) if v.existing_conditions else []
+        
+        state: TwinState = compute_twin_state(
+            visit_id=v.visit_id,
+            visit_timestamp=v.visit_timestamp,
+            initial_risk_score=float(latest.risk_score),
+            initial_priority=latest.priority_level,
+            age=v.patient.age,
+            existing_conditions=existing,
+            vitals=vitals_dict,
+        )
+        
+        if state.alert_level in ["DETERIORATING", "CRITICAL_ALERT"]:
+            priority = state.twin_priority
+            risk_score = state.projected_risk_score
+    except Exception:
+        pass
+        
+    try:
+        p_key = priority_to_sort_key(priority)
+    except ValueError:
+        p_key = 3
+        
+    return p_key, float(risk_score)
+
 def get_emergency_queue(db: Session) -> list[Visit]:
     """Return all Waiting+Attending visits with queue_type="Emergency",
     ordered by priority (Critical first) then by visit_timestamp
@@ -49,19 +98,9 @@ def get_emergency_queue(db: Session) -> list[Visit]:
         Visit.queue_type == "Emergency"
     ).all()
     
-    from aarogyaq.priority import priority_to_sort_key
-    
     def sort_key(v: Visit):
-        priority = 3  # Default to Low
-        risk_score = 0.0
-        if v.assessments:
-            active = max(v.assessments, key=lambda a: a.assessment_id)
-            try:
-                priority = priority_to_sort_key(active.priority_level)
-                risk_score = active.risk_score
-            except ValueError:
-                pass
-        return (priority, -risk_score, v.visit_timestamp, v.visit_id)
+        p_key, risk_score = get_active_sort_keys(v)
+        return (p_key, -risk_score, v.visit_timestamp, v.visit_id)
         
     visits.sort(key=sort_key)
     return visits
@@ -73,19 +112,9 @@ def get_general_queue(db: Session) -> list[Visit]:
         Visit.queue_type == "General"
     ).all()
     
-    from aarogyaq.priority import priority_to_sort_key
-    
     def sort_key(v: Visit):
-        priority = 3  # Default to Low
-        risk_score = 0.0
-        if v.assessments:
-            active = max(v.assessments, key=lambda a: a.assessment_id)
-            try:
-                priority = priority_to_sort_key(active.priority_level)
-                risk_score = active.risk_score
-            except ValueError:
-                pass
-        return (priority, -risk_score, v.visit_timestamp, v.visit_id)
+        p_key, risk_score = get_active_sort_keys(v)
+        return (p_key, -risk_score, v.visit_timestamp, v.visit_id)
         
     visits.sort(key=sort_key)
     return visits
