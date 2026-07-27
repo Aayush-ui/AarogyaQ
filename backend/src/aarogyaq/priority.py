@@ -49,6 +49,28 @@ def classify(score: float) -> str:
     else:
         return "Low"
 
+def classify_with_thresholds(score: float, thresholds: dict[str, tuple[float, float]]) -> str:
+    """Map risk score (0-100) to priority level string using dynamic thresholds.
+    Uses provided thresholds mapping priority name -> (low, high).
+    Score outside [0,100] raises ValueError.
+    """
+    if not (0 <= score <= 100):
+        raise ValueError(f"Score {score} is outside [0, 100]")
+        
+    for priority, (low, high) in thresholds.items():
+        if low <= score <= high:
+            return priority
+            
+    # Fallback for overlaps/gaps in adjusted thresholds
+    if score >= thresholds.get("Critical", (76.0, 100.0))[0]:
+        return "Critical"
+    elif score >= thresholds.get("High", (51.0, 75.0))[0]:
+        return "High"
+    elif score >= thresholds.get("Medium", (26.0, 50.0))[0]:
+        return "Medium"
+    else:
+        return "Low"
+
 def get_color(priority: str) -> str:
     """Return hex color string for a priority level.
     Raises ValueError for unknown priority.

@@ -8,7 +8,7 @@
 ## Overall Completion
 
 `
-████████████████████████░░░░░░░░░░░░░░░░  60%  [60 / 100 points]
+██████████████████████████░░░░░░░░░░░░░░  65%  [65 / 100 points]
 `
 
 ---
@@ -45,7 +45,7 @@
 
 ### 🟤 Reinforcement Learning Agent
 `
-████████████████████████░░░░░░░░░░░░░░░░  60%
+████████████████████████████████░░░░░░░░  80%
 `
 - [x] Q-learning epsilon-greedy contextual bandit (l_agent.py)
 - [x] State space: (queue_type, time_of_day, queue_depth_bucket)
@@ -53,10 +53,10 @@
 - [x] SLA-based reward function in [-1.0, +1.0]
 - [x] Q-table persisted in l_qtable.json
 - [x] REST endpoints: POST /rl/feedback, GET /rl/state, GET /rl/thresholds
-- [ ] R-RL-01 — Auto-trigger RL feedback on visit completion
+- [x] R-RL-01 — Auto-trigger RL feedback on visit completion
 - [ ] R-RL-02 — GET /rl/history endpoint + reward convergence chart
 - [ ] R-RL-04 — Q-value / epsilon decay visualization in AdminDashboard
-- [ ] R-RL-05 — Wire RL-adjusted thresholds into live triage pipeline
+- [x] R-RL-05 — Wire RL-adjusted thresholds into live triage pipeline
 
 ---
 
@@ -136,11 +136,11 @@
 | R-DYN-02 | Auto-reassessment trigger endpoint | ⬜ Pending | — |
 | R-DYN-03 | Deterioration urgency UI cues | ⬜ Pending | — |
 | R-DYN-04 | Mid-visit vitals patch endpoint | ⬜ Pending | — |
-| R-RL-01 | Auto RL feedback on completion | ⬜ Pending | — |
+| R-RL-01 | Auto RL feedback on completion | ✅ Done | 2026-07-27 |
 | R-RL-02 | /rl/history + reward chart | ⬜ Pending | — |
 | R-RL-03 | Document bandit constraint | ⬜ Pending | — |
 | R-RL-04 | Q-value / epsilon decay chart | ⬜ Pending | — |
-| R-RL-05 | Wire RL thresholds into triage | ⬜ Pending | — |
+| R-RL-05 | Wire RL thresholds into triage | ✅ Done | 2026-07-27 |
 | R-SED-01 | SSE / WebSocket live queue | ⬜ Pending | — |
 | R-SED-02 | Throughput analytics charts | ⬜ Pending | — |
 | R-SED-03 | AI toggle in NurseIntake form | ⬜ Pending | — |

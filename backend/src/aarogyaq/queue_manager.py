@@ -7,11 +7,14 @@ lifecycle.  Every status change emits an audit log entry.
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from aarogyaq.models import Visit
 from aarogyaq.audit import log_event
 from aarogyaq.priority import QUEUE_ASSIGNMENT
+
+logger = logging.getLogger(__name__)
 
 AGING_THRESHOLD_MINUTES = 45
 
@@ -135,6 +138,48 @@ def update_visit_status(
             raise ValueError(f"Cannot transition from {visit.status} to Completed")
         visit.completed_at = now
         visit.status = "Completed"
+        
+        # Trigger RL outcome feedback update directly
+        try:
+            # calculate minutes_to_attend
+            minutes_to_attend = 0
+            if visit.attended_at and visit.visit_timestamp:
+                diff = visit.attended_at - visit.visit_timestamp
+                minutes_to_attend = int(diff.total_seconds() / 60)
+            
+            # get latest priority level
+            priority_level = "Low"
+            if visit.assessments:
+                latest = max(visit.assessments, key=lambda a: a.assessment_id)
+                priority_level = latest.priority_level
+                
+            # calculate queue depth at the time of completion
+            queue_depth = db.query(Visit).filter(
+                Visit.status == "Waiting",
+                Visit.queue_type == visit.queue_type,
+                Visit.visit_id != visit.visit_id
+            ).count()
+            
+            from aarogyaq.rl_agent import (
+                load_agent, save_agent, make_state_key, select_action,
+                compute_reward, update_qtable, apply_threshold_offset
+            )
+            agent = load_agent()
+            state_key = make_state_key(
+                queue_type=visit.queue_type,
+                queue_depth=queue_depth,
+            )
+            action_idx = select_action(agent, state_key)
+            reward = compute_reward(priority_level, minutes_to_attend)
+            
+            update_qtable(agent, state_key, action_idx, reward)
+            apply_threshold_offset(agent, visit.queue_type, action_idx)
+            save_agent(agent)
+            
+            logger.info("Auto RL feedback update succeeded for visit %s. Reward: %s, Action delta: %s", visit.visit_id, reward, action_idx)
+        except Exception as exc:
+            # Warn but do not crash the transaction if the RL feedback logic fails
+            logger.warning("Auto RL feedback update failed for completed visit %s: %s", visit_id, exc)
         
     db.flush()
     log_event(db, actor=actor, action=new_status.upper(), visit_id=visit_id)

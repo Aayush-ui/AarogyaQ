@@ -57,8 +57,23 @@ def assess_patient(db: Session, visit_id: int, use_ai: bool = False, symptoms: l
         fired_rules.extend(weight_factors)
         contributing_factors.extend(weight_labels)
         
-        # 4. Classify priority
-        base_priority = classify(risk_score)
+        # 4. Classify priority using RL-adjusted thresholds
+        from aarogyaq.rl_agent import load_agent, get_adjusted_thresholds
+        from aarogyaq.priority import classify_with_thresholds
+        try:
+            agent = load_agent()
+            emergency_thresholds = get_adjusted_thresholds("Emergency", agent)
+            general_thresholds = get_adjusted_thresholds("General", agent)
+            
+            # If the score meets or exceeds the emergency High threshold, classify using Emergency thresholds
+            high_cutoff_emergency = emergency_thresholds["High"][0]
+            if risk_score >= high_cutoff_emergency:
+                base_priority = classify_with_thresholds(risk_score, emergency_thresholds)
+            else:
+                base_priority = classify_with_thresholds(risk_score, general_thresholds)
+        except Exception as exc:
+            logger.warning("Failed to classify using RL-adjusted thresholds, falling back to static: %s", exc)
+            base_priority = classify(risk_score)
     
     # 5. Apply business rules
     business_rules = load_business_rules()
