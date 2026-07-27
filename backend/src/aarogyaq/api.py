@@ -137,6 +137,7 @@ def visit_to_dict(v: Visit) -> dict:
         "status": v.status,
         "department_assigned": v.department_assigned,
         "bed_assigned": getattr(v, "bed_assigned", None),
+        "needs_reassessment": getattr(v, "needs_reassessment", False),
         "attended_at": v.attended_at,
         "completed_at": v.completed_at,
         "clinical_notes": [],
@@ -297,6 +298,21 @@ async def get_twin_state(visit_id: int, db: Session = Depends(get_db)):
     if twin is None:
         raise HTTPException(status_code=404, detail="No assessment found for this visit — twin unavailable")
     return twin
+
+@router.post("/visits/{visit_id}/twin/alert")
+async def trigger_twin_alert(visit_id: int, db: Session = Depends(get_db)):
+    """Flag a patient for reassessment due to dynamic deterioration projected by the Digital Twin."""
+    from aarogyaq.queue_manager import log_event
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(status_code=404, detail=f"Visit {visit_id} not found")
+        
+    visit.needs_reassessment = True
+    db.flush()
+    
+    log_event(db, actor="system", action="TWIN_ALERT_TRIGGERED", visit_id=visit_id, notes="Digital Twin flagged patient for reassessment due to active deterioration.")
+    
+    return {"status": "alert_triggered", "needs_reassessment": True}
 
 @router.get("/visits/{visit_id}/explanation", response_model=ExplanationResponse)
 async def get_visit_explanation(visit_id: int, db: Session = Depends(get_db)):

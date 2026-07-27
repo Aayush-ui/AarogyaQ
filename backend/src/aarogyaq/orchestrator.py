@@ -179,6 +179,7 @@ def reassess_patient(db: Session, visit_id: int, new_chief_complaint: str, new_p
         
     visit.chief_complaint = new_chief_complaint
     visit.pain_level = new_pain_level
+    visit.needs_reassessment = False
     db.flush()
     
     result = assess_patient(db, visit_id, use_ai)

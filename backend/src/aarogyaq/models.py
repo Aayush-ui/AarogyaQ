@@ -109,6 +109,7 @@ class Visit(Base):
     attended_at         = sa.Column(sa.DateTime, nullable=True)
     completed_at        = sa.Column(sa.DateTime, nullable=True)
     bed_assigned        = sa.Column(sa.String,   nullable=True)
+    needs_reassessment  = sa.Column(sa.Boolean,  nullable=False, default=False)
 
     patient        = relationship("Patient",       back_populates="visits")
     assessments    = relationship("Assessment",    back_populates="visit")
@@ -438,6 +439,7 @@ class VisitOut(BaseModel):
     bed_assigned:        str | None = None
     attended_at:         datetime | None = None
     completed_at:        datetime | None = None
+    needs_reassessment:  bool = False
     vitals:              VitalsOut | None = None
     clinical_notes:      list[ClinicalNoteOut] = Field(default_factory=list)
     medication_orders:   list[MedicationOrderOut] = Field(default_factory=list)
