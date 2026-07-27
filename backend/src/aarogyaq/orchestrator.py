@@ -100,7 +100,8 @@ def assess_patient(db: Session, visit_id: int, use_ai: bool = False, symptoms: l
         priority_level=final_priority,
         contributing_factors=contributing_factors,
         department_assigned=dept_name,
-        use_ai=use_ai
+        use_ai=use_ai,
+        business_flags=business_flags
     )
     
     # 9. Persist Assessment

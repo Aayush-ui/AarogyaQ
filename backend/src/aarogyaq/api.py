@@ -112,6 +112,16 @@ class RLFeedbackRequest(BaseModel):
     minutes_to_attend: int
     queue_depth:       int = 0
 
+class BusinessOverrideExplanation(BaseModel):
+    flag: str
+    explanation: str
+
+class ExplanationResponse(BaseModel):
+    rule_breakdown: List[dict]
+    business_overrides: List[BusinessOverrideExplanation]
+    twin_alert_reasons: List[str]
+    rl_threshold_at_time: dict[str, List[float]]
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def visit_to_dict(v: Visit) -> dict:
@@ -287,6 +297,50 @@ async def get_twin_state(visit_id: int, db: Session = Depends(get_db)):
     if twin is None:
         raise HTTPException(status_code=404, detail="No assessment found for this visit — twin unavailable")
     return twin
+
+@router.get("/visits/{visit_id}/explanation", response_model=ExplanationResponse)
+async def get_visit_explanation(visit_id: int, db: Session = Depends(get_db)):
+    """Return the detailed XAI explanation elements for a patient visit."""
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(status_code=404, detail=f"Visit {visit_id} not found")
+        
+    if not visit.assessments:
+        raise HTTPException(status_code=422, detail=f"No assessments found for visit {visit_id}")
+        
+    latest_assessment = max(visit.assessments, key=lambda a: a.assessment_id)
+    
+    # 1. Rule breakdown
+    rule_breakdown = json.loads(latest_assessment.score_breakdown) if latest_assessment.score_breakdown else []
+    
+    # 2. Business overrides
+    from aarogyaq.summary_gen import BUSINESS_FLAG_EXPLANATIONS
+    business_flags = json.loads(latest_assessment.business_rule_flags) if latest_assessment.business_rule_flags else []
+    business_overrides = []
+    for flag in business_flags:
+        explanation = BUSINESS_FLAG_EXPLANATIONS.get(flag, f"Override logic triggered for flag: {flag}")
+        business_overrides.append(
+            BusinessOverrideExplanation(flag=flag, explanation=explanation)
+        )
+        
+    # 3. Digital Twin Alert Reasons
+    twin = twin_for_visit(visit, latest_assessment)
+    twin_alert_reasons = twin.get("alert_reasons", []) if twin else []
+    
+    # 4. RL Threshold at Time
+    agent = load_agent()
+    raw_thresholds = get_adjusted_thresholds(visit.queue_type, agent)
+    # Convert tuples to lists for JSON serialization
+    rl_threshold_at_time = {
+        k: [v[0], v[1]] for k, v in raw_thresholds.items()
+    }
+    
+    return ExplanationResponse(
+        rule_breakdown=rule_breakdown,
+        business_overrides=business_overrides,
+        twin_alert_reasons=twin_alert_reasons,
+        rl_threshold_at_time=rl_threshold_at_time
+    )
 
 @router.patch("/visits/{visit_id}/status", response_model=VisitOut)
 async def patch_visit_status(visit_id: int, data: VisitStatusPatch, db: Session = Depends(get_db)):
