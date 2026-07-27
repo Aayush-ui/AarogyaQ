@@ -8,7 +8,7 @@
 ## Overall Completion
 
 `
-███████████████████████████░░░░░░░░░░░░░  68%  [68 / 100 points]
+████████████████████████████░░░░░░░░░░░░  70%  [70 / 100 points]
 `
 
 ---
@@ -62,7 +62,7 @@
 
 ### 🟢 Digital Twin & Dynamic Prioritization
 `
-████████████████████████░░░░░░░░░░░░░░░░  60%
+████████████████████████████░░░░░░░░░░░░  70%
 `
 - [x] compute_twin_state() with physiology-based deterioration rates
 - [x] NEWS2/MEWS inspired alert levels: STABLE / MONITOR / DETERIORATING / CRITICAL_ALERT
@@ -70,7 +70,7 @@
 - [x] GET /visits/{visit_id}/twin endpoint
 - [x] Twin state embedded in all queue responses
 - [x] R-DYN-01 — Queue re-sort by twin_priority on deterioration
-- [ ] R-DYN-02 — Auto-reassessment trigger endpoint
+- [x] R-DYN-02 — Auto-reassessment trigger endpoint
 - [ ] R-DYN-03 — Visual deterioration urgency cues in Command Center
 - [ ] R-DYN-04 — Mid-visit vitals patch and re-score
 
@@ -133,7 +133,7 @@
 | R-XAI-04 | XAI export endpoint | ⬜ Pending | — |
 | R-XAI-05 | Business flag human descriptions | ✅ Done | 2026-07-27 |
 | R-DYN-01 | Queue re-sort by twin_priority | ✅ Done | 2026-07-27 |
-| R-DYN-02 | Auto-reassessment trigger endpoint | ⬜ Pending | — |
+| R-DYN-02 | Auto-reassessment trigger endpoint | ✅ Done | 2026-07-27 |
 | R-DYN-03 | Deterioration urgency UI cues | ⬜ Pending | — |
 | R-DYN-04 | Mid-visit vitals patch endpoint | ⬜ Pending | — |
 | R-RL-01 | Auto RL feedback on completion | ✅ Done | 2026-07-27 |
