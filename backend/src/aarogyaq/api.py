@@ -33,6 +33,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+async def startup_event():
+    from aarogyaq.database import init_db, seed_departments
+    init_db()
+    seed_departments()
+
 router = APIRouter()
 
 # Exception Handlers

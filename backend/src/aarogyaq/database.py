@@ -85,6 +85,15 @@ def init_db() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
 
+    import sqlalchemy as sa
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    if "visits" in inspector.get_table_names():
+        columns = [c["name"] for c in inspector.get_columns("visits")]
+        if "needs_reassessment" not in columns:
+            with engine.begin() as conn:
+                conn.execute(sa.text("ALTER TABLE visits ADD COLUMN needs_reassessment BOOLEAN NOT NULL DEFAULT 0"))
+
 
 def seed_departments() -> None:
     """Insert the 8 default departments when the ``departments`` table is empty.
