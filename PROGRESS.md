@@ -8,7 +8,7 @@
 ## Overall Completion
 
 `
-████████████████████████████░░░░░░░░░░░░  70%  [70 / 100 points]
+██████████████████████████░░░░░░░░░░░░░░  65%  [65 / 100 points]
 `
 
 ---
@@ -123,6 +123,17 @@
 
 ---
 
+### 🔐 Security — Authentication & Authorization
+`
+░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  0%
+`
+- [x] Frontend RBAC config (`rbac.ts`) — roles, routes, permissions, sidebar items
+- [x] Zustand `isAuthenticated` + `currentUser` + `activeRole` state
+- [ ] R-SEC-01 — Backend JWT auth (`POST /auth/login`, `get_current_user` dependency, route protection)
+- [ ] R-SEC-02 — Frontend real credential validation, JWT storage in memory, `Authorization: Bearer` header
+
+---
+
 ## Change Tracking
 
 | Change ID | Description | Status | Completed On |
@@ -145,12 +156,15 @@
 | R-SED-02 | Throughput analytics charts | ⬜ Pending | — |
 | R-SED-03 | AI toggle in NurseIntake form | ⬜ Pending | — |
 | R-SED-04 | Role-based login enforcement | ⬜ Pending | — |
+| R-SEC-01 | Backend JWT auth + route protection | ⬜ Pending | — |
+| R-SEC-02 | Frontend real credential validation + JWT flow | ⬜ Pending | — |
 
 ---
 
 ## Notes
 
 - Progress bar denominator is qualitative (feature completeness weight, not raw line count).
+- Total tracked change IDs: **20** (18 original + R-SEC-01, R-SEC-02 added 2026-07-27).
 - Scores are re-evaluated after each major task or bulk completion event, or at minimum every 2 days.
 - See [REVISED.md](REVISED.md) for full gap analysis and per-change rationale.
-- Passing test suite confirms backend correctness at each milestone: **139 tests / 0 failures**.
+- Passing test suite confirms backend correctness at each milestone: **149 tests / 0 failures**.

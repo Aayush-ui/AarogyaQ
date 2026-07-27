@@ -1,4 +1,4 @@
-﻿# AarogyaQ — Revised Project Alignment Document
+# AarogyaQ — Revised Project Alignment Document
 
 > **Revised Topic (Mentor-Approved):**
 > *"AarogyaQ: An Explainable AI and Dynamic Patient Prioritization Framework Using Reinforcement Learning for Smart Emergency Departments"*
@@ -99,28 +99,45 @@ The revised topic title introduces three explicit academic pillars that must be 
 
 ---
 
+### 5. Security — Authentication & Authorization — *❌ Not Implemented*
+
+#### ✅ What Exists
+- `rbac.ts` defines `ROLE_ALLOWED_ROUTES`, `ROLE_PERMISSIONS`, `ROLE_SIDEBAR_ITEMS` and `isRouteAllowed()` for Nurse / Doctor / Administrator.
+- `useUIStore.ts` tracks `isAuthenticated`, `activeRole`, and `currentUser` in Zustand state.
+
+#### ❌ What is Missing / Must Be Added
+
+| # | Gap | Required Change |
+|---|-----|-----------------|
+| R-SEC-01 | **No backend JWT authentication** — all API endpoints are fully open with zero auth middleware | Add `POST /auth/login` issuing signed JWT tokens; add `get_current_user` FastAPI dependency; protect all non-public routes with `Depends(get_current_user)` |
+| R-SEC-02 | **Frontend login does not validate credentials against any backend** — `login()` in `useUIStore` accepts any username/role with no network call or password check | Wire `Login.tsx` to call `POST /auth/login`, store returned JWT in memory (not localStorage), attach as `Authorization: Bearer` header on all subsequent API calls, and enforce role-mapped dashboard redirects using existing `rbac.ts` config |
+
+---
+
 ## 📋 Summary of All Required Changes
 
 | ID | Module/File | Category | Priority | Status |
 |----|-------------|----------|----------|--------|
 | R-XAI-01 | `frontend/pages/DoctorDashboard.tsx` | XAI | 🔴 High | ⬜ Pending |
-| R-XAI-02 | `backend/api.py` | XAI | 🔴 High | ⬜ Pending |
+| R-XAI-02 | `backend/api.py` | XAI | 🔴 High | ✅ Done |
 | R-XAI-03 | `frontend/pages/NurseIntake.tsx` | XAI | 🟡 Medium | ⬜ Pending |
 | R-XAI-04 | `backend/api.py` | XAI | 🟢 Low | ⬜ Pending |
-| R-XAI-05 | `backend/src/aarogyaq/summary_gen.py` | XAI | 🟡 Medium | ⬜ Pending |
-| R-DYN-01 | `queue_manager.py` + `LiveQueue.tsx` | Dynamic | 🔴 High | ⬜ Pending |
-| R-DYN-02 | `backend/api.py` | Dynamic | 🟡 Medium | ⬜ Pending |
+| R-XAI-05 | `backend/src/aarogyaq/summary_gen.py` | XAI | 🟡 Medium | ✅ Done |
+| R-DYN-01 | `queue_manager.py` + `LiveQueue.tsx` | Dynamic | 🔴 High | ✅ Done |
+| R-DYN-02 | `backend/api.py` | Dynamic | 🟡 Medium | ✅ Done |
 | R-DYN-03 | `frontend/pages/CommandCenter.tsx` | Dynamic | 🟡 Medium | ⬜ Pending |
 | R-DYN-04 | `backend/api.py` | Dynamic | 🟢 Low | ⬜ Pending |
-| R-RL-01 | `backend/src/aarogyaq/queue_manager.py` | RL | 🔴 High | ⬜ Pending |
+| R-RL-01 | `backend/src/aarogyaq/queue_manager.py` | RL | 🔴 High | ✅ Done |
 | R-RL-02 | `backend/api.py` + `AdminDashboard.tsx` | RL | 🟡 Medium | ⬜ Pending |
 | R-RL-03 | Academic write-up / documentation | RL | 🟢 Low | ⬜ Pending |
 | R-RL-04 | `frontend/pages/AdminDashboard.tsx` | RL | 🟡 Medium | ⬜ Pending |
-| R-RL-05 | `orchestrator.py` + `priority.py` | RL | 🔴 High | ⬜ Pending |
+| R-RL-05 | `orchestrator.py` + `priority.py` | RL | 🔴 High | ✅ Done |
 | R-SED-01 | `backend/api.py` | Smart ED | 🟡 Medium | ⬜ Pending |
 | R-SED-02 | `frontend/pages/AdminDashboard.tsx` | Smart ED | 🟡 Medium | ⬜ Pending |
 | R-SED-03 | `frontend/pages/NurseIntake.tsx` | Smart ED | 🟡 Medium | ⬜ Pending |
 | R-SED-04 | `frontend/pages/Login.tsx` | Smart ED | 🟢 Low | ⬜ Pending |
+| R-SEC-01 | `backend/api.py` + new `auth.py` | Security | 🔴 High | ⬜ Pending |
+| R-SEC-02 | `frontend/pages/Login.tsx` + `useUIStore.ts` | Security | 🔴 High | ⬜ Pending |
 
 ---
 

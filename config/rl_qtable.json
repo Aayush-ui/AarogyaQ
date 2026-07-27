@@ -1,19 +1,19 @@
 {
   "version": 1,
-  "epsilon": 0.1976131560988418,
-  "episodes": 12,
+  "epsilon": 0.1970209092724004,
+  "episodes": 15,
   "qtable": {
     "General|afternoon|low": [
       0.0,
       0.0,
-      0.569533,
+      0.651322,
       0.1,
       0.0
     ],
     "Emergency|afternoon|low": [
       0.0,
       0.0,
-      0.271,
+      0.3439,
       0.0,
       0.0
     ]
