@@ -7,20 +7,15 @@ import React from "react";
 import { motion } from "motion/react";
 import {
   LayoutDashboard,
-  UsersRound,
-  FileSpreadsheet,
-  Settings,
-  FlameKindling,
-  Hospital,
+  ClipboardList,
+  Clock,
+  Stethoscope,
+  FileText,
+  Sliders,
   ChevronLeft,
   ChevronRight,
   EyeOff,
   Eye,
-  Compass,
-  Brain,
-  RefreshCw,
-  Flame,
-  Heart,
 } from "lucide-react";
 import { useUIStore } from "../../store/useUIStore";
 import { ROLE_SIDEBAR_ITEMS, UserRole } from "../../config/rbac";
@@ -34,22 +29,16 @@ const getIconElement = (iconName: string) => {
   switch (iconName) {
     case "LayoutDashboard":
       return <LayoutDashboard className="h-5 w-5" />;
-    case "UsersRound":
-      return <UsersRound className="h-5 w-5" />;
-    case "Brain":
-      return <Brain className="h-5 w-5" />;
-    case "RefreshCw":
-      return <RefreshCw className="h-5 w-5" />;
-    case "FileSpreadsheet":
-      return <FileSpreadsheet className="h-5 w-5" />;
-    case "Flame":
-      return <Flame className="h-5 w-5" />;
-    case "Heart":
-      return <Heart className="h-5 w-5" />;
-    case "Hospital":
-      return <Hospital className="h-5 w-5" />;
-    case "Compass":
-      return <Compass className="h-5 w-5" />;
+    case "ClipboardList":
+      return <ClipboardList className="h-5 w-5" />;
+    case "Clock":
+      return <Clock className="h-5 w-5" />;
+    case "Stethoscope":
+      return <Stethoscope className="h-5 w-5" />;
+    case "FileText":
+      return <FileText className="h-5 w-5" />;
+    case "Sliders":
+      return <Sliders className="h-5 w-5" />;
     default:
       return <LayoutDashboard className="h-5 w-5" />;
   }

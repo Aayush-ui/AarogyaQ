@@ -3,242 +3,240 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect } from "react";
-import { 
-  Users, 
-  ShieldAlert, 
-  Hospital, 
-  Activity, 
-  Timer, 
-  Compass, 
-  FileSpreadsheet,
-  Brain,
-  Terminal,
-  ChevronRight
-} from "lucide-react";
-import { useQueueStore } from "../store/useQueueStore";
-import { useUIStore } from "../store/useUIStore";
+import React, { useEffect, useState } from "react";
+import { Cpu, Terminal, RefreshCw, AlertCircle, BarChart3, Database } from "lucide-react";
+import { getRLState, getRLThresholds } from "../api/rl";
+import { RLState, RLThresholds } from "../types";
 import { PageTransition } from "../components/layout/PageTransition";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
-import { AnimatedCounter } from "../components/charts/AnimatedCounter";
+import { useUIStore } from "../store/useUIStore";
 
 export const AdminDashboard: React.FC = () => {
-  const { emergencyQueue, generalQueue, fetchQueues, fetchDepartments, departments, isLoading } = useQueueStore();
-  const { isOffline, auditLogs, addToast } = useUIStore();
+  const { addToast } = useUIStore();
+  const [rlState, setRlState] = useState<RLState | null>(null);
+  const [rlThresholds, setRlThresholds] = useState<RLThresholds | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [state, thresholds] = await Promise.all([
+        getRLState(),
+        getRLThresholds(),
+      ]);
+      setRlState(state);
+      setRlThresholds(thresholds);
+    } catch (err: any) {
+      console.error(err);
+      setError("Failed to fetch reinforcement learning parameters from backend.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    fetchQueues();
-    fetchDepartments();
-    const interval = setInterval(() => {
-      fetchQueues(true);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [fetchQueues, fetchDepartments]);
+    loadData();
+  }, []);
 
-  const activeCount = emergencyQueue.length + generalQueue.length;
-  const criticalCount = emergencyQueue.filter(p => p.assessment?.priority_level === "Critical").length;
+  if (isLoading && !rlState) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 space-y-3">
+        <RefreshCw className="h-8 w-8 text-[hsl(220,85%,58%)] animate-spin" />
+        <span className="text-xs text-[#8492a6] font-medium uppercase tracking-widest animate-pulse">
+          Connecting to Reinforcement Learning Engine...
+        </span>
+      </div>
+    );
+  }
 
-  const adminShortcuts = [
-    { title: "Department Management", desc: "Manage hospital beds allocation & departments", icon: <Hospital className="h-5 w-5 text-indigo-500" />, hash: "#/departments" },
-    { title: "Shift Analytics Summary", desc: "Clinician efficiency reports, shift metrics", icon: <FileSpreadsheet className="h-5 w-5 text-blue-500" />, hash: "#/shift" },
-    { title: "Operations Security Console", desc: "Live audits trail, logs registry, code triggers", icon: <Compass className="h-5 w-5 text-emerald-500" />, hash: "#/command" },
-  ];
+  if (error) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-4">
+        <div className="h-12 w-12 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center border border-red-500/20">
+          <AlertCircle className="h-6 w-6" />
+        </div>
+        <div>
+          <h3 className="text-sm font-bold text-[#e8ecf4]">RL Engine Unreachable</h3>
+          <p className="text-xs text-[#8492a6] mt-1.5 max-w-sm mx-auto leading-relaxed">{error}</p>
+        </div>
+        <Button onClick={loadData} variant="primary" size="sm">
+          Retry Connect
+        </Button>
+      </div>
+    );
+  }
 
   return (
-    <PageTransition id="admin-dashboard">
-      <div className="p-6 max-w-7xl mx-auto space-y-8">
-        
+    <PageTransition id="admin-dashboard-page">
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <span className="text-xs font-bold text-indigo-400 tracking-widest uppercase block mb-1">
-              SYSTEM OVERVIEW
-            </span>
-            <h1 className="text-2xl font-black text-slate-100 tracking-tight flex items-center gap-2">
-              Hospital Operations Command Center
+            <h1 className="text-2xl font-black text-[#e8ecf4] tracking-tight">
+              RL Bandit Control Center
             </h1>
+            <p className="text-xs text-[#8492a6] font-medium uppercase tracking-wider mt-1">
+              Configure priority thresholds, analyze reward values, and monitor Q-table offsets.
+            </p>
           </div>
-          <div className="text-xs font-mono font-bold text-slate-300 bg-white/5 border border-white/10 px-3.5 py-1.5 rounded-full uppercase">
-            Active Shift Clearance: ADMINISTRATOR
-          </div>
+          <Button
+            onClick={loadData}
+            variant="ghost"
+            size="sm"
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className="h-4 w-4" /> Sync Parameter States
+          </Button>
         </div>
 
-        {/* Global KPIs */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="p-5 flex items-center justify-between hover:border-white/20" hoverable>
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                Active Queue Size
+        {/* Global RL Metrics Cards */}
+        {rlState && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
+            <Card className="bg-[#1a1f2e] border border-[#2a3040] rounded-xl p-4">
+              <span className="text-[10px] font-bold text-[#8492a6] uppercase tracking-wide">
+                Agent Version
               </span>
-              <div className="text-3xl font-extrabold text-slate-100">
-                <AnimatedCounter value={activeCount} />
-              </div>
-              <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider block">
-                Occupancy: 84%
-              </span>
-            </div>
-            <div className="p-3 bg-blue-500/10 text-blue-400 rounded-2xl border border-blue-500/20">
-              <Users className="h-5 w-5" />
-            </div>
-          </Card>
+              <div className="text-2xl font-bold text-[#e8ecf4] mt-1">{rlState.version}</div>
+            </Card>
 
-          <Card className="p-5 flex items-center justify-between hover:border-white/20" hoverable>
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                Overloaded Areas
+            <Card className="bg-[#1a1f2e] border border-[#2a3040] rounded-xl p-4">
+              <span className="text-[10px] font-bold text-[#8492a6] uppercase tracking-wide">
+                Epsilon (Exploration Rate)
               </span>
-              <div className="text-3xl font-extrabold text-slate-100">
-                <AnimatedCounter value={departments.filter(d => d.status === "Overloaded").length} />
-              </div>
-              <span className="text-[10px] text-red-400 font-bold uppercase tracking-wider block">
-                Requires intervention
-              </span>
-            </div>
-            <div className="p-3 bg-red-500/10 text-red-400 rounded-2xl border border-red-500/20">
-              <ShieldAlert className="h-5 w-5 animate-pulse" />
-            </div>
-          </Card>
+              <div className="text-2xl font-bold text-[#e8ecf4] mt-1">{(rlState.epsilon * 100).toFixed(1)}%</div>
+            </Card>
 
-          <Card className="p-5 flex items-center justify-between hover:border-white/20" hoverable>
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                Active Clinicians
+            <Card className="bg-[#1a1f2e] border border-[#2a3040] rounded-xl p-4">
+              <span className="text-[10px] font-bold text-[#8492a6] uppercase tracking-wide">
+                Training Episodes
               </span>
-              <div className="text-3xl font-extrabold text-slate-100">
-                <span>3</span>
-                <span className="text-sm font-medium ml-1 text-slate-400">Live</span>
-              </div>
-              <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider block">
-                Fully Synchronized
-              </span>
-            </div>
-            <div className="p-3 bg-indigo-500/10 text-indigo-400 rounded-2xl border border-indigo-500/20">
-              <Hospital className="h-5 w-5" />
-            </div>
-          </Card>
+              <div className="text-2xl font-bold text-[#e8ecf4] mt-1">{rlState.episodes}</div>
+            </Card>
 
-          <Card className="p-5 flex items-center justify-between hover:border-white/20" hoverable>
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                Avg AI Model Handshake
+            <Card className="bg-[#1a1f2e] border border-[#2a3040] rounded-xl p-4">
+              <span className="text-[10px] font-bold text-[#8492a6] uppercase tracking-wide">
+                Q-Table States Count
               </span>
-              <div className="text-3xl font-extrabold text-slate-100">
-                <span>1.4</span>
-                <span className="text-sm font-medium ml-1 text-slate-400">sec</span>
-              </div>
-              <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider block">
-                SLA Performance normal
-              </span>
-            </div>
-            <div className="p-3 bg-cyan-500/10 text-cyan-400 rounded-2xl border border-cyan-500/20">
-              <Brain className="h-5 w-5" />
-            </div>
-          </Card>
-        </div>
-
-        {/* Administration Sections */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* Department status card */}
-          <div className="lg:col-span-2 space-y-4">
-            <h2 className="text-sm font-bold text-slate-300 uppercase tracking-widest flex items-center gap-2">
-              <Hospital className="h-4 w-4 text-slate-400" />
-              Live Clinical Department Workloads
-            </h2>
-            <Card className="p-6 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {departments.map((dep) => (
-                  <div key={dep.name} className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-extrabold text-slate-200">{dep.name}</span>
-                      <span className={`text-[9px] font-bold font-mono px-2 py-0.5 rounded-full ${
-                        dep.status === "Overloaded" ? "bg-red-500/10 text-red-400 border border-red-500/20" :
-                        "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                      }`}>{dep.status}</span>
-                    </div>
-                    <div className="flex justify-between items-end">
-                      <div className="text-[11px] text-slate-400 font-medium">Active Patients:</div>
-                      <div className="text-base font-extrabold text-slate-100">{dep.active_patients}</div>
-                    </div>
-                    <div className="flex justify-between items-end">
-                      <div className="text-[11px] text-slate-400 font-medium">Wait Time:</div>
-                      <div className="text-xs font-bold text-slate-300">{dep.wait_time_mins} mins</div>
-                    </div>
-                    {/* Progress Bar */}
-                    <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full rounded-full ${
-                          dep.status === "Overloaded" ? "bg-red-500 animate-pulse" : "bg-blue-500"
-                        }`}
-                        style={{ width: `${Math.min((dep.active_patients / 15) * 100, 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="text-right pt-2">
-                <Button size="sm" variant="outline" onClick={() => window.location.hash = "#/departments"}>
-                  <span>Manage Bed Registry</span>
-                  <ChevronRight className="h-3.5 w-3.5 ml-1" />
-                </Button>
-              </div>
+              <div className="text-2xl font-bold text-[#e8ecf4] mt-1">{rlState.qtable_size}</div>
             </Card>
           </div>
+        )}
 
-          {/* Quick Access Sidebar */}
-          <div className="space-y-4">
-            <h2 className="text-sm font-bold text-slate-300 uppercase tracking-widest">
-              Operator Panels
-            </h2>
-            <div className="space-y-3">
-              {adminShortcuts.map((sc) => (
-                <Card 
-                  key={sc.title}
-                  onClick={() => {
-                    window.location.hash = sc.hash;
-                    addToast(`Launching administrative terminal: ${sc.title}`, "info");
-                  }}
-                  className="p-4 bg-white/[0.03] hover:bg-white/[0.08] border-white/10 transition-all cursor-pointer flex gap-4 items-center group shadow-sm"
-                  hoverable
-                >
-                  <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 group-hover:bg-white/10 transition-all">
-                    {sc.icon}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column: Adjusted Thresholds */}
+          <div className="lg:col-span-1 space-y-6">
+            {rlThresholds && (
+              <>
+                <Card className="bg-[#1a1f2e] border border-[#2a3040] rounded-xl p-5 space-y-4">
+                  <h3 className="text-xs font-bold text-[#8492a6] uppercase tracking-widest flex items-center gap-2 border-b border-[#2a3040] pb-2">
+                    <BarChart3 className="h-4 w-4 text-red-500" />
+                    Emergency Stream Thresholds
+                  </h3>
+                  <div className="space-y-3">
+                    {Object.entries(rlThresholds.Emergency).map(([priority, range]) => (
+                      <div key={priority} className="p-3 bg-[#0f1117] border border-[#2a3040] rounded-lg flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#e8ecf4]">{priority}</span>
+                        <span className="text-xs font-bold font-mono text-red-400 bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">
+                          {range[0]} - {range[1]}
+                        </span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between items-center text-[10px] text-[#8492a6] pt-1">
+                      <span>Bandit Priority Offset:</span>
+                      <span className="font-mono font-bold text-[#e8ecf4]">
+                        {rlState?.threshold_offsets.Emergency.toFixed(2) ?? "0.00"}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-xs font-bold text-slate-100 group-hover:text-indigo-400 leading-tight">
-                      {sc.title}
-                    </h3>
-                    <p className="text-[10px] text-slate-400 mt-1 truncate">
-                      {sc.desc}
-                    </p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-slate-500 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all" />
                 </Card>
-              ))}
-            </div>
+
+                <Card className="bg-[#1a1f2e] border border-[#2a3040] rounded-xl p-5 space-y-4">
+                  <h3 className="text-xs font-bold text-[#8492a6] uppercase tracking-widest flex items-center gap-2 border-b border-[#2a3040] pb-2">
+                    <BarChart3 className="h-4 w-4 text-blue-400" />
+                    General Stream Thresholds
+                  </h3>
+                  <div className="space-y-3">
+                    {Object.entries(rlThresholds.General).map(([priority, range]) => (
+                      <div key={priority} className="p-3 bg-[#0f1117] border border-[#2a3040] rounded-lg flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#e8ecf4]">{priority}</span>
+                        <span className="text-xs font-bold font-mono text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+                          {range[0]} - {range[1]}
+                        </span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between items-center text-[10px] text-[#8492a6] pt-1">
+                      <span>Bandit Priority Offset:</span>
+                      <span className="font-mono font-bold text-[#e8ecf4]">
+                        {rlState?.threshold_offsets.General.toFixed(2) ?? "0.00"}
+                      </span>
+                    </div>
+                  </div>
+                </Card>
+              </>
+            )}
           </div>
 
-        </div>
+          {/* Right Column: Q-Table Visualization preview */}
+          <div className="lg:col-span-2 space-y-6">
+            <Card className="bg-[#1a1f2e] border border-[#2a3040] rounded-xl p-5 space-y-4">
+              <h3 className="text-xs font-bold text-[#8492a6] uppercase tracking-widest flex items-center gap-2 border-b border-[#2a3040] pb-2">
+                <Database className="h-4 w-4 text-emerald-400" />
+                Learned Q-Table Offsets (First 10 States)
+              </h3>
+              {rlState && Object.keys(rlState.qtable_preview).length > 0 ? (
+                <div className="overflow-x-auto max-h-96 scrollbar-thin">
+                  <table className="w-full text-xs text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-[#2a3040] text-[#8492a6]">
+                        <th className="py-2 px-3">State Key</th>
+                        <th className="py-2 px-3 text-right">Action Index 0</th>
+                        <th className="py-2 px-3 text-right">Action Index 1</th>
+                        <th className="py-2 px-3 text-right">Action Index 2</th>
+                        <th className="py-2 px-3 text-right">Action Index 3</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#2a3040]/30 text-[#e8ecf4]">
+                      {Object.entries(rlState.qtable_preview).map(([state, actions]) => (
+                        <tr key={state} className="hover:bg-white/5">
+                          <td className="py-3 px-3 font-mono font-bold">{state}</td>
+                          <td className="py-3 px-3 text-right font-mono text-emerald-400">
+                            {actions[0]?.toFixed(4) ?? "0.0000"}
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono text-yellow-400">
+                            {actions[1]?.toFixed(4) ?? "0.0000"}
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono text-orange-400">
+                            {actions[2]?.toFixed(4) ?? "0.0000"}
+                          </td>
+                          <td className="py-3 px-3 text-right font-mono text-red-500">
+                            {actions[3]?.toFixed(4) ?? "0.0000"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-4 text-center text-xs text-[#8492a6] italic">
+                  Q-Table offset values are currently initializing or empty.
+                </div>
+              )}
+            </Card>
 
-        {/* Live System Log Stream */}
-        <div className="space-y-4">
-          <h2 className="text-sm font-bold text-slate-300 uppercase tracking-widest flex items-center gap-1.5">
-            <Terminal className="h-4 w-4 text-slate-400" />
-            Live Hospital cryptographic Audits Trail
-          </h2>
-          <Card className="p-5 border-white/10 bg-slate-950 text-slate-300 font-mono text-xs rounded-2xl shadow-inner space-y-2">
-            {auditLogs.slice(0, 4).map((log) => (
-              <div key={log.id} className="flex flex-col sm:flex-row gap-1 sm:gap-4 hover:bg-white/5 p-1 rounded transition-colors">
-                <span className="text-slate-500 text-[10px] font-bold shrink-0">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                <span className="text-blue-400 font-bold shrink-0 uppercase tracking-wider text-[10px] bg-blue-500/10 px-1 rounded border border-blue-500/10">[{log.role}]</span>
-                <span className="text-slate-300 leading-normal flex-1">{log.action}</span>
-                <span className="text-slate-500 text-[10px] shrink-0 text-right font-semibold uppercase">{log.user}</span>
-              </div>
-            ))}
-          </Card>
+            <Card className="bg-[#1a1f2e] border border-[#2a3040] rounded-xl p-5 space-y-4">
+              <h3 className="text-xs font-bold text-[#8492a6] uppercase tracking-widest flex items-center gap-2 border-b border-[#2a3040] pb-2">
+                <Terminal className="h-4 w-4 text-yellow-400" />
+                RL Decision Auditing
+              </h3>
+              <p className="text-xs text-[#8492a6] leading-relaxed">
+                Triage operations, status modifications, and delay metrics generate rewards/penalties to automatically adjust bandit weights. For complete audit trails or system actions, refer to the global dashboard and browser network logs.
+              </p>
+            </Card>
+          </div>
         </div>
-
       </div>
     </PageTransition>
   );

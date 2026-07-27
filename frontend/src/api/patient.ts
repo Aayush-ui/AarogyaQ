@@ -5,35 +5,31 @@
 
 import apiClient from "./client";
 import { TriageQueueItem } from "../types";
-import { registerSimulatedPatient, simulatedQueue } from "./simulatedDb";
 
-export interface RegisterPatientPayload {
+export async function submitPatientIntake(payload: {
   name: string;
   age: number;
   gender: string;
-  phone: string;
-  pain_level: number;
+  phone?: string;
   chief_complaint: string;
-  symptoms: string[];
-}
-
-export async function registerPatient(payload: RegisterPatientPayload): Promise<TriageQueueItem> {
-  try {
-    const response = await apiClient.post<TriageQueueItem>("/patients/register", payload);
-    return response.data;
-  } catch (error) {
-    console.warn("FastAPI offline, using simulated registration.", error);
-    return registerSimulatedPatient(payload);
-  }
+  pain_level: number;
+  symptom_duration?: number;
+  existing_conditions?: string[];
+  vitals?: {
+    heart_rate?: number;
+    systolic_bp?: number;
+    diastolic_bp?: number;
+    spo2?: number;
+    temperature?: number;
+    respiratory_rate?: number;
+  };
+  use_ai?: boolean;
+}): Promise<TriageQueueItem> {
+  const response = await apiClient.post<TriageQueueItem>("/patients/register", payload);
+  return response.data;
 }
 
 export async function getPatientHistory(patientId: string): Promise<TriageQueueItem[]> {
-  try {
-    const response = await apiClient.get<TriageQueueItem[]>(`/patients/${patientId}/history`);
-    return response.data;
-  } catch (error) {
-    console.warn("FastAPI offline, returning simulated history.", error);
-    // Return all records for this patient
-    return simulatedQueue.filter(item => item.patient.patient_id === patientId);
-  }
+  const response = await apiClient.get<TriageQueueItem[]>(`/patients/${patientId}/history`);
+  return response.data;
 }

@@ -5,8 +5,28 @@
 
 import { create } from "zustand";
 import { TriageQueueItem } from "../types";
-import { getPatientHistory, registerPatient, RegisterPatientPayload } from "../api/patient";
+import { getPatientHistory, submitPatientIntake } from "../api/patient";
 import { useUIStore } from "./useUIStore";
+
+export interface RegisterPatientPayload {
+  name: string;
+  age: number;
+  gender: string;
+  phone?: string;
+  chief_complaint: string;
+  pain_level: number;
+  symptom_duration?: number;
+  existing_conditions?: string[];
+  vitals?: {
+    heart_rate?: number;
+    systolic_bp?: number;
+    diastolic_bp?: number;
+    spo2?: number;
+    temperature?: number;
+    respiratory_rate?: number;
+  };
+  use_ai?: boolean;
+}
 
 interface PatientState {
   selectedPatient: TriageQueueItem | null;
@@ -30,7 +50,9 @@ const initialIntakeForm: RegisterPatientPayload = {
   phone: "",
   pain_level: 5,
   chief_complaint: "",
-  symptoms: [],
+  symptom_duration: 1,
+  existing_conditions: [],
+  use_ai: false,
 };
 
 export const usePatientStore = create<PatientState>((set, get) => ({
@@ -62,7 +84,7 @@ export const usePatientStore = create<PatientState>((set, get) => ({
     set({ isSubmitting: true, triageResult: null });
     const uiStore = useUIStore.getState();
     try {
-      const result = await registerPatient(payload);
+      const result = await submitPatientIntake(payload);
       set({ triageResult: result, isSubmitting: false });
       uiStore.addToast(`Patient registered and triaged as ${result.assessment.priority_level}!`, "success");
       return result;

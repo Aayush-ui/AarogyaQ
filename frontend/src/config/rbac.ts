@@ -27,36 +27,30 @@ export interface PermissionSet {
 
 // Map roles to their landing page hash
 export const ROLE_LANDING_PAGES: Record<UserRole, string> = {
-  Nurse: "#/dashboard/nurse",
-  Doctor: "#/dashboard/doctor",
-  Administrator: "#/dashboard/admin",
+  Nurse: "#/intake",
+  Doctor: "#/doctor",
+  Administrator: "#/dashboard",
 };
 
 // Map roles to their allowed routes
 export const ROLE_ALLOWED_ROUTES: Record<UserRole, string[]> = {
   Nurse: [
-    "#/dashboard/nurse",
-    "#/register",
-    "#/nurse",
-    "#/reassess",
-    "#/patient-history",
+    "#/dashboard",
+    "#/intake",
+    "#/queue",
   ],
   Doctor: [
-    "#/dashboard/doctor",
-    "#/live", // Doctor has access to Live Queues
-    "#/patient-history",
-    "#/clinical-summary",
-    "#/register", // can remain enabled for doctor too as optional
+    "#/dashboard",
+    "#/queue",
+    "#/doctor",
   ],
   Administrator: [
-    "#/dashboard/admin",
-    "#/register",
-    "#/nurse",
-    "#/live",
-    "#/patient-history",
+    "#/dashboard",
+    "#/intake",
+    "#/queue",
+    "#/doctor",
     "#/shift",
-    "#/departments",
-    "#/command",
+    "#/admin",
   ],
 };
 
@@ -67,7 +61,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, PermissionSet> = {
     canReassessPatient: true,
     canViewEmergencyQueue: true,
     canViewGeneralQueue: true,
-    canViewPatientHistory: true,
+    canViewPatientHistory: false,
     canUpdatePatientStatus: false,
     canManageDepartments: false,
     canAccessAuditLogs: false,
@@ -75,7 +69,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, PermissionSet> = {
     canAccessSystemSettings: false,
   },
   Doctor: {
-    canRegisterPatient: true, // remains optional/enabled for doctor in MVP
+    canRegisterPatient: true,
     canPerformAITriage: false,
     canReassessPatient: true,
     canViewEmergencyQueue: true,
@@ -104,27 +98,22 @@ export const ROLE_PERMISSIONS: Record<UserRole, PermissionSet> = {
 
 export const ROLE_SIDEBAR_ITEMS: Record<UserRole, { id: string; label: string; icon: string }[]> = {
   Nurse: [
-    { id: "#/dashboard/nurse", label: "Dashboard", icon: "LayoutDashboard" },
-    { id: "#/register", label: "Register Patient", icon: "UsersRound" },
-    { id: "#/nurse", label: "AI Triage", icon: "Brain" },
-    { id: "#/reassess", label: "Reassessment", icon: "RefreshCw" },
-    { id: "#/patient-history", label: "Patient History", icon: "FileSpreadsheet" },
+    { id: "#/dashboard", label: "Overview", icon: "LayoutDashboard" },
+    { id: "#/intake", label: "Nurse Intake", icon: "ClipboardList" },
+    { id: "#/queue", label: "Live Queue", icon: "Clock" },
   ],
   Doctor: [
-    { id: "#/dashboard/doctor", label: "Dashboard", icon: "LayoutDashboard" },
-    { id: "#/live", label: "Emergency Queue", icon: "Flame" },
-    { id: "#/patient-history", label: "Patient History", icon: "UsersRound" },
-    { id: "#/clinical-summary", label: "Clinical Summary", icon: "Heart" },
+    { id: "#/dashboard", label: "Overview", icon: "LayoutDashboard" },
+    { id: "#/queue", label: "Live Queue", icon: "Clock" },
+    { id: "#/doctor", label: "Doctor Console", icon: "Stethoscope" },
   ],
   Administrator: [
-    { id: "#/dashboard/admin", label: "Operations Dashboard", icon: "LayoutDashboard" },
-    { id: "#/register", label: "Register Patient", icon: "UsersRound" },
-    { id: "#/nurse", label: "AI Triage", icon: "Brain" },
-    { id: "#/live", label: "Emergency Queue", icon: "Flame" },
-    { id: "#/patient-history", label: "Patient History", icon: "FileSpreadsheet" },
-    { id: "#/shift", label: "Shift Summary", icon: "FileSpreadsheet" },
-    { id: "#/departments", label: "Department Management", icon: "Hospital" },
-    { id: "#/command", label: "Audit Logs & Alerts", icon: "Compass" },
+    { id: "#/dashboard", label: "Overview", icon: "LayoutDashboard" },
+    { id: "#/intake", label: "Nurse Intake", icon: "ClipboardList" },
+    { id: "#/queue", label: "Live Queue", icon: "Clock" },
+    { id: "#/doctor", label: "Doctor Console", icon: "Stethoscope" },
+    { id: "#/shift", label: "Shift Report", icon: "FileText" },
+    { id: "#/admin", label: "Admin Console", icon: "Sliders" },
   ],
 };
 

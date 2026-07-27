@@ -94,3 +94,32 @@ export interface ShiftReportData {
     count: number;
   }[];
 }
+
+export interface ExplanationData {
+  visit_id: number;
+  risk_score: number;
+  priority_level: string;
+  rule_breakdown: Record<string, number>;
+  contributing_factors: string[];
+  business_overrides: Record<string, string>;
+  twin_alert_reasons: string[];
+  rl_threshold_at_assessment: Record<string, [number, number]>;
+}
+
+export interface RLState {
+  version: number;
+  epsilon: number;
+  episodes: number;
+  threshold_offsets: {
+    Emergency: number;
+    General: number;
+  };
+  qtable_size: number;
+  actions: string[];
+  qtable_preview: Record<string, number[]>;
+}
+
+export interface RLThresholds {
+  Emergency: Record<string, [number, number]>;
+  General: Record<string, [number, number]>;
+}

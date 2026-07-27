@@ -8,15 +8,11 @@ import { motion, AnimatePresence } from "motion/react";
 import { Dashboard } from "../pages/Dashboard";
 import { NurseIntake } from "../pages/NurseIntake";
 import { LiveQueue } from "../pages/LiveQueue";
-import { PatientHistory } from "../pages/PatientHistory";
 import { ShiftReport } from "../pages/ShiftReport";
-import { DepartmentControl } from "../pages/DepartmentControl";
-import { CommandCenter } from "../pages/CommandCenter";
 import { useUIStore } from "../store/useUIStore";
-import { NurseDashboard } from "../pages/NurseDashboard";
 import { DoctorDashboard } from "../pages/DoctorDashboard";
 import { AdminDashboard } from "../pages/AdminDashboard";
-import { isRouteAllowed, ROLE_LANDING_PAGES, UserRole } from "../config/rbac";
+import { isRouteAllowed, ROLE_LANDING_PAGES } from "../config/rbac";
 
 interface AppRouterProps {
   currentRoute: string;
@@ -29,8 +25,8 @@ export const AppRouter: React.FC<AppRouterProps> = ({ currentRoute }) => {
   useEffect(() => {
     const cleanRoute = currentRoute.split("?")[0] || "#/dashboard";
 
-    // Standard redirect from root hash or dashboard base to role-specific landing dashboard
-    if (cleanRoute === "" || cleanRoute === "#" || cleanRoute === "#/dashboard") {
+    // Standard redirect from root hash to role-specific landing dashboard
+    if (cleanRoute === "" || cleanRoute === "#") {
       window.location.hash = ROLE_LANDING_PAGES[activeRole];
       return;
     }
@@ -60,51 +56,30 @@ export const AppRouter: React.FC<AppRouterProps> = ({ currentRoute }) => {
       );
     }
 
-    // Dashboard routes
-    if (cleanRoute === "#/dashboard/nurse") {
-      return <NurseDashboard />;
+    if (cleanRoute === "#/dashboard") {
+      return <Dashboard />;
     }
-    if (cleanRoute === "#/dashboard/doctor") {
-      return <DoctorDashboard />;
-    }
-    if (cleanRoute === "#/dashboard/admin") {
-      return <AdminDashboard />;
-    }
-
-    // Standard routes
-    if (cleanRoute === "#/nurse") {
+    if (cleanRoute === "#/intake") {
       return <NurseIntake />;
     }
-    if (cleanRoute === "#/register") {
-      return <NurseIntake />; // The intake page has both register and triage forms
-    }
-    if (cleanRoute === "#/reassess") {
-      return <NurseIntake />; // Handled in same intake workspace
-    }
-    if (cleanRoute === "#/live") {
+    if (cleanRoute === "#/queue") {
       return <LiveQueue />;
     }
-    if (cleanRoute === "#/departments") {
-      return <DepartmentControl />;
+    if (cleanRoute === "#/doctor") {
+      return <DoctorDashboard />;
     }
     if (cleanRoute === "#/shift") {
       return <ShiftReport />;
     }
-    if (cleanRoute === "#/command") {
-      return <CommandCenter />;
-    }
-    if (cleanRoute.startsWith("#/patient/")) {
-      return <PatientHistory />;
-    }
-    if (cleanRoute === "#/patient-history") {
-      return <PatientHistory />;
+    if (cleanRoute === "#/admin") {
+      return <AdminDashboard />;
     }
 
     // Default Fallback based on role landing
-    const landing = ROLE_LANDING_PAGES[activeRole] || "#/dashboard/doctor";
-    if (landing === "#/dashboard/nurse") return <NurseDashboard />;
-    if (landing === "#/dashboard/admin") return <AdminDashboard />;
-    return <DoctorDashboard />;
+    const landing = ROLE_LANDING_PAGES[activeRole] || "#/dashboard";
+    if (landing === "#/intake") return <NurseIntake />;
+    if (landing === "#/doctor") return <DoctorDashboard />;
+    return <Dashboard />;
   };
 
   return (

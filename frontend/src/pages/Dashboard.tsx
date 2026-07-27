@@ -4,13 +4,11 @@
  */
 
 import React, { useEffect } from "react";
-import { AlertCircle, ShieldAlert, Heart, Users, Timer, Activity } from "lucide-react";
+import { ShieldAlert, Users, Timer, Activity, ClipboardList, ArrowRight } from "lucide-react";
 import { useQueueStore } from "../store/useQueueStore";
 import { useUIStore } from "../store/useUIStore";
 import { PageTransition } from "../components/layout/PageTransition";
 import { Card } from "../components/ui/Card";
-import { AnimatedCounter } from "../components/charts/AnimatedCounter";
-import { QueueColumn } from "../components/queue/QueueColumn";
 import { Button } from "../components/ui/Button";
 
 export const Dashboard: React.FC = () => {
@@ -19,7 +17,6 @@ export const Dashboard: React.FC = () => {
     generalQueue,
     staleQueue,
     fetchQueues,
-    fetchDepartments,
     isLoading,
   } = useQueueStore();
 
@@ -28,170 +25,169 @@ export const Dashboard: React.FC = () => {
   // Background polling every 5 seconds
   useEffect(() => {
     fetchQueues();
-    fetchDepartments();
 
     const interval = setInterval(() => {
       fetchQueues(true); // silent fetch in background
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [fetchQueues, fetchDepartments]);
+  }, [fetchQueues]);
 
-  const activeCount = emergencyQueue.length + generalQueue.length;
+  const waitingCount = emergencyQueue.filter(item => item.visit.status === "Waiting").length + 
+                       generalQueue.filter(item => item.visit.status === "Waiting").length;
   const criticalCount = emergencyQueue.filter(
     (item) => item.assessment.priority_level === "Critical"
-  ).length;
-  const highCount = emergencyQueue.filter(
-    (item) => item.assessment.priority_level === "High"
   ).length;
 
   return (
     <PageTransition id="dashboard-page">
-      {/* Top Banner Alert if any Stale Patients exist */}
-      {staleQueue.length > 0 && (
-        <Card className="mb-6 border-red-500/30 bg-red-950/15 backdrop-blur-xl shadow-red-500/5 animate-pulse">
-          <div className="p-4 flex items-center gap-3">
-            <ShieldAlert className="h-5 w-5 text-red-500 flex-shrink-0" />
-            <div className="flex-1">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-red-400">
-                Critical Queue Overload Alert
-              </h4>
-              <p className="text-xs text-red-200 mt-1 leading-relaxed">
-                There are currently <strong className="font-mono text-sm">{staleQueue.length}</strong> patients in the intake stream waiting for more than 45 minutes without disposition. Action required.
-              </p>
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        {/* Top Banner Alert if any Stale Patients exist */}
+        {staleQueue.length > 0 && (
+          <div className="p-4 bg-red-950/20 border border-red-500/30 rounded-xl flex items-center justify-between gap-4 animate-pulse">
+            <div className="flex items-center gap-3">
+              <ShieldAlert className="h-5 w-5 text-red-500 shrink-0" />
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-red-400">
+                  Critical Queue Overload Alert
+                </h4>
+                <p className="text-xs text-red-200 mt-1">
+                  There are currently <strong className="font-mono text-sm">{staleQueue.length}</strong> patients waiting for more than 45 minutes without disposition.
+                </p>
+              </div>
             </div>
             <Button
               variant="danger"
               size="sm"
               onClick={() => {
-                window.location.hash = "#/live";
-                addToast("Navigated to Live streams to manage stale triage logs.", "info");
+                window.location.hash = "#/queue";
+                addToast("Navigated to Live Queue to resolve stale cases.", "info");
               }}
             >
-              Resolve Stream
+              Resolve Alerts
             </Button>
           </div>
-        </Card>
-      )}
+        )}
 
-      {/* Hero Welcome / Section title */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl font-black text-slate-100 tracking-tight flex items-center gap-2">
-            Clinical Triage Dashboard
-          </h1>
-          <p className="text-xs text-slate-400 font-semibold mt-1 uppercase tracking-wider">
-            Real-time emergency monitoring, priority streams, and diagnostics flow.
-          </p>
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-black text-[#e8ecf4] tracking-tight">
+              Emergency Department Overview
+            </h1>
+            <p className="text-xs text-[#8492a6] font-medium uppercase tracking-wider mt-1">
+              Smart patient prioritization, digital twin tracking, and operational analytics.
+            </p>
+          </div>
+          {isOffline && (
+            <span className="text-[10px] font-bold font-mono text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 px-3 py-1 rounded-full uppercase tracking-wider">
+              Offline Mode
+            </span>
+          )}
         </div>
 
-        {isOffline && (
-          <span className="text-[10px] font-bold font-mono text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 px-3 py-1 rounded-full uppercase tracking-wider">
-            Viewing Offline Simulation Database
-          </span>
-        )}
-      </div>
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <Card className="bg-[#1a1f2e] border border-[#2a3040] rounded-xl p-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <span className="text-xs font-medium text-[#8492a6] uppercase tracking-wide">
+                  Patients Waiting
+                </span>
+                <div className="text-3xl font-bold text-[#e8ecf4]">
+                  {isLoading && waitingCount === 0 ? "..." : waitingCount}
+                </div>
+                <p className="text-xs text-[#8492a6]">In registry queues</p>
+              </div>
+              <div className="p-3 bg-blue-500/10 text-[hsl(220,85%,58%)] rounded-xl border border-blue-500/20">
+                <Users className="h-6 w-6" />
+              </div>
+            </div>
+          </Card>
 
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {/* Total Active Queue */}
-        <Card className="hover:border-white/20" hoverable>
-          <div className="p-4 flex items-center justify-between">
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                Active Registry
-              </span>
-              <span className="text-3xl font-extrabold text-slate-100">
-                <AnimatedCounter value={activeCount} />
-              </span>
-              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-1">
-                Patients awaiting care
-              </span>
+          <Card className="bg-[#1a1f2e] border border-[#2a3040] rounded-xl p-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <span className="text-xs font-medium text-red-400 uppercase tracking-wide">
+                  Critical Cases
+                </span>
+                <div className="text-3xl font-bold text-red-500">
+                  {isLoading && criticalCount === 0 ? "..." : criticalCount}
+                </div>
+                <p className="text-xs text-[#8492a6]">High-priority triage</p>
+              </div>
+              <div className="p-3 bg-red-500/10 text-red-500 rounded-xl border border-red-500/20">
+                <ShieldAlert className="h-6 w-6" />
+              </div>
             </div>
-            <div className="p-3 bg-white/5 border border-white/10 rounded-2xl text-blue-400">
-              <Users className="h-5 w-5" />
-            </div>
-          </div>
-        </Card>
+          </Card>
 
-        {/* Critical Cases */}
-        <Card className={`hover:border-red-500/40 ${criticalCount > 0 ? "border-red-500/20 bg-red-950/5" : ""}`} hoverable>
-          <div className="p-4 flex items-center justify-between">
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-bold text-red-400 uppercase tracking-widest">
-                Critical Tier
-              </span>
-              <span className={`text-3xl font-extrabold ${criticalCount > 0 ? "text-red-400" : "text-slate-100"}`}>
-                <AnimatedCounter value={criticalCount} />
-              </span>
-              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-1">
-                High-priority trauma
-              </span>
+          <Card className="bg-[#1a1f2e] border border-[#2a3040] rounded-xl p-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <span className="text-xs font-medium text-yellow-400 uppercase tracking-wide">
+                  Overdue Waits
+                </span>
+                <div className="text-3xl font-bold text-yellow-500">
+                  {isLoading && staleQueue.length === 0 ? "..." : staleQueue.length}
+                </div>
+                <p className="text-xs text-[#8492a6]">Waiting &gt; 45 mins</p>
+              </div>
+              <div className="p-3 bg-yellow-500/10 text-yellow-500 rounded-xl border border-yellow-500/20">
+                <Timer className="h-6 w-6" />
+              </div>
             </div>
-            <div className={`p-3 bg-white/5 border rounded-2xl ${criticalCount > 0 ? "border-red-500/20 text-red-500 animate-pulse" : "border-white/10 text-slate-400"}`}>
-              <ShieldAlert className="h-5 w-5" />
-            </div>
-          </div>
-        </Card>
+          </Card>
+        </div>
 
-        {/* High Urgency Cases */}
-        <Card className="hover:border-orange-500/40" hoverable>
-          <div className="p-4 flex items-center justify-between">
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-bold text-orange-400 uppercase tracking-widest">
-                High Priority
-              </span>
-              <span className="text-3xl font-extrabold text-slate-100">
-                <AnimatedCounter value={highCount} />
-              </span>
-              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-1">
-                Escalated vital records
-              </span>
+        {/* Quick Actions Panel */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Card className="bg-[#1a1f2e] border border-[#2a3040] rounded-xl p-6 flex flex-col justify-between space-y-4">
+            <div>
+              <h3 className="text-lg font-semibold text-[#e8ecf4] mb-2 flex items-center gap-2">
+                <ClipboardList className="h-5 w-5 text-[hsl(220,85%,58%)]" />
+                Register New Patient
+              </h3>
+              <p className="text-sm text-[#8492a6]">
+                Intake new emergency and general admissions. Log patient details, chief complaints, symptoms, and physiological vitals to trigger the AI-driven triage pipeline.
+              </p>
             </div>
-            <div className="p-3 bg-white/5 border border-white/10 rounded-2xl text-orange-400">
-              <Heart className="h-5 w-5" />
+            <div>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  window.location.hash = "#/intake";
+                }}
+                className="flex items-center gap-2"
+              >
+                Go to Intake Form <ArrowRight className="h-4 w-4" />
+              </Button>
             </div>
-          </div>
-        </Card>
+          </Card>
 
-        {/* Overdue waiting times */}
-        <Card className="hover:border-white/20" hoverable>
-          <div className="p-4 flex items-center justify-between">
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                Overdue Waits (&gt;45m)
-              </span>
-              <span className={`text-3xl font-extrabold ${staleQueue.length > 0 ? "text-yellow-400" : "text-slate-100"}`}>
-                <AnimatedCounter value={staleQueue.length} />
-              </span>
-              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-1">
-                Awaiting disposition
-              </span>
+          <Card className="bg-[#1a1f2e] border border-[#2a3040] rounded-xl p-6 flex flex-col justify-between space-y-4">
+            <div>
+              <h3 className="text-lg font-semibold text-[#e8ecf4] mb-2 flex items-center gap-2">
+                <Activity className="h-5 w-5 text-emerald-500" />
+                Live Patient Queue
+              </h3>
+              <p className="text-sm text-[#8492a6]">
+                View and manage the clinical triage streams. Supports dynamic re-sorting via Digital Twin physiological predictions and priority offsets set by the RL agent.
+              </p>
             </div>
-            <div className="p-3 bg-white/5 border border-white/10 rounded-2xl text-yellow-400">
-              <Timer className="h-5 w-5" />
+            <div>
+              <Button
+                variant="success"
+                onClick={() => {
+                  window.location.hash = "#/queue";
+                }}
+                className="flex items-center gap-2"
+              >
+                Open Live Queue <ArrowRight className="h-4 w-4" />
+              </Button>
             </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* Main Queue Split View */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        {/* Emergency Column */}
-        <QueueColumn
-          title="Emergency Care Stream"
-          items={emergencyQueue}
-          theme="emergency"
-          isLoading={isLoading}
-        />
-
-        {/* General Column */}
-        <QueueColumn
-          title="General Medical Stream"
-          items={generalQueue}
-          theme="general"
-          isLoading={isLoading}
-        />
+          </Card>
+        </div>
       </div>
     </PageTransition>
   );

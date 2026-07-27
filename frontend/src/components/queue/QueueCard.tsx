@@ -15,6 +15,7 @@ import { ProgressRing } from "../ui/ProgressRing";
 import { ExplainabilityPanel } from "./ExplainabilityPanel";
 import { Button } from "../ui/Button";
 import { TwinBadge } from "../patient/TwinBadge";
+import { TwinAlertBadge } from "./TwinAlertBadge";
 
 interface QueueCardProps {
   item: TriageQueueItem;
@@ -93,11 +94,17 @@ export const QueueCard: React.FC<QueueCardProps> = ({ item, id }) => {
                   {gender.charAt(0)}, {age}y
                 </span>
               </div>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
                 <PriorityBadge priority={priority_level} />
                 <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase bg-white/5 px-2 py-0.5 rounded border border-white/10 tabular">
                   {department_assigned}
                 </span>
+                <TwinAlertBadge alertLevel={item.twin?.alert_level} />
+                {item.visit.needs_reassessment && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-yellow-500/10 text-yellow-500 border border-yellow-500/20">
+                    ⚡ Needs Reassessment
+                  </span>
+                )}
               </div>
             </div>
             
@@ -197,10 +204,10 @@ export const QueueCard: React.FC<QueueCardProps> = ({ item, id }) => {
                 className="hover:bg-white/5 text-slate-400 border border-white/10"
                 onClick={() => {
                   selectPatient(item);
-                  window.location.hash = `#/patient/${patient_id}`;
+                  window.location.hash = "#/doctor";
                 }}
               >
-                History
+                Console
               </Button>
               <Button
                 variant="primary"

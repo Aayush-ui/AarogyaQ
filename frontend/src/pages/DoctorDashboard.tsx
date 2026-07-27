@@ -3,280 +3,294 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect } from "react";
-import { 
-  Flame, 
-  UsersRound, 
-  Heart, 
-  Activity, 
-  Clock, 
-  ShieldAlert, 
-  ArrowRight,
-  ClipboardList,
-  Stethoscope,
-  ChevronRight
-} from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { User, Activity, AlertTriangle, ShieldCheck, HeartPulse, RefreshCw, Clock } from "lucide-react";
 import { useQueueStore } from "../store/useQueueStore";
 import { useUIStore } from "../store/useUIStore";
 import { PageTransition } from "../components/layout/PageTransition";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
-import { AnimatedCounter } from "../components/charts/AnimatedCounter";
+import { TriageQueueItem, ExplanationData } from "../types";
+import { getExplanation } from "../api/explanation";
+import { updateVisitStatus, reassessVisit } from "../api/visits";
+import { XAIPanel } from "../components/queue/XAIPanel";
+import { PriorityBadge } from "../components/queue/PriorityBadge";
+import { TwinAlertBadge } from "../components/queue/TwinAlertBadge";
 
 export const DoctorDashboard: React.FC = () => {
-  const { emergencyQueue, fetchQueues, isLoading } = useQueueStore();
+  const { emergencyQueue, generalQueue, fetchQueues, isLoading: queueLoading } = useQueueStore();
   const { addToast } = useUIStore();
 
+  const [selectedItem, setSelectedItem] = useState<TriageQueueItem | null>(null);
+  const [explanation, setExplanation] = useState<ExplanationData | null>(null);
+  const [expLoading, setExpLoading] = useState(false);
+  const [expError, setExpError] = useState<string | null>(null);
+
+  const [reassessOpen, setReassessOpen] = useState(false);
+  const [tempPain, setTempPain] = useState(5);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  // Poll queues every 5 seconds
   useEffect(() => {
     fetchQueues();
-    const interval = setInterval(() => fetchQueues(true), 5000);
+    const interval = setInterval(() => {
+      fetchQueues(true);
+    }, 5000);
     return () => clearInterval(interval);
   }, [fetchQueues]);
 
-  const activeTraumaCount = emergencyQueue.length;
-  const criticalTierCount = emergencyQueue.filter(
-    (item) => item.assessment?.priority_level === "Critical"
-  ).length;
+  // Combined and sorted lists
+  const allPatients = [...emergencyQueue, ...generalQueue].sort((a, b) => {
+    // Critical first, then High, then Medium, then Low
+    const order = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+    const aOrder = order[a.assessment.priority_level as keyof typeof order] ?? 4;
+    const bOrder = order[b.assessment.priority_level as keyof typeof order] ?? 4;
+    if (aOrder !== bOrder) return aOrder - bOrder;
+    return b.assessment.risk_score - a.assessment.risk_score;
+  });
 
-  const doctorQuickActions = [
-    {
-      title: "Active Trauma Stream",
-      desc: "Review live critical emergency queues & prioritize cases",
-      icon: <Flame className="h-6 w-6 text-red-500 animate-pulse" />,
-      hash: "#/live"
-    },
-    {
-      title: "Medication Orders",
-      desc: "Authorized medical prescription, dosage, & labs dispatch desk",
-      icon: <Stethoscope className="h-6 w-6 text-blue-500" />,
-      hash: "#/live"
-    },
-    {
-      title: "Patient History Archive",
-      desc: "Search patient clinical charts, vitals timelines & records",
-      icon: <UsersRound className="h-6 w-6 text-indigo-500" />,
-      hash: "#/patient-history"
-    },
-    {
-      title: "Discharge disposition",
-      desc: "Review patient outcome tracking & generate discharge notes",
-      icon: <ClipboardList className="h-6 w-6 text-emerald-500" />,
-      hash: "#/live"
+  // Keep selection synced when queues refresh
+  useEffect(() => {
+    if (selectedItem) {
+      const match = allPatients.find(p => p.visit.visit_id === selectedItem.visit.visit_id);
+      if (match) {
+        setSelectedItem(match);
+      }
     }
-  ];
+  }, [emergencyQueue, generalQueue]);
+
+  // Load explanation when item changes
+  useEffect(() => {
+    if (!selectedItem) {
+      setExplanation(null);
+      setExpError(null);
+      return;
+    }
+
+    const loadExp = async () => {
+      setExpLoading(true);
+      setExpError(null);
+      try {
+        const data = await getExplanation(selectedItem.visit.visit_id);
+        setExplanation(data);
+      } catch (err: any) {
+        console.error("XAI Load Error:", err);
+        setExpError(err.message || "Failed to retrieve explainability report from FastAPI.");
+      } finally {
+        setExpLoading(false);
+      }
+    };
+
+    loadExp();
+    setReassessOpen(false);
+    setTempPain(selectedItem.visit.pain_level);
+  }, [selectedItem?.visit.visit_id]);
+
+  const handleStatusChange = async (newStatus: "Attending" | "Completed") => {
+    if (!selectedItem) return;
+    setActionLoading(true);
+    try {
+      await updateVisitStatus(selectedItem.visit.visit_id, newStatus);
+      addToast(`Patient status successfully changed to ${newStatus}.`, "success");
+      await fetchQueues();
+    } catch (err: any) {
+      addToast(`Action failed: ${err.message || err}`, "error");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReassessSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedItem) return;
+    setActionLoading(true);
+    try {
+      const updated = await reassessVisit(selectedItem.visit.visit_id, tempPain);
+      addToast("Patient reassessed successfully.", "success");
+      setSelectedItem(updated);
+      setReassessOpen(false);
+      await fetchQueues();
+    } catch (err: any) {
+      addToast(`Reassessment failed: ${err.message || err}`, "error");
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   return (
-    <PageTransition id="doctor-dashboard">
-      <div className="p-6 max-w-7xl mx-auto space-y-8">
-        
-        {/* Header banner */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <span className="text-xs font-bold text-red-400 tracking-widest uppercase block mb-1 animate-pulse">
-              🔴 LIVE CRITICAL DISPATCH
-            </span>
-            <h1 className="text-2xl font-black text-slate-100 tracking-tight">
-              Physician Triage Portal
-            </h1>
-          </div>
-          <div className="text-xs font-mono font-bold text-slate-300 bg-white/5 border border-white/10 px-3.5 py-1.5 rounded-full uppercase">
-            Active Shift Clearance: MEDICAL DOCTOR (MD)
-          </div>
-        </div>
-
-        {/* Dynamic Vitals Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="p-5 flex items-center justify-between hover:border-white/20" hoverable>
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                Active Emergencies
-              </span>
-              <div className="text-3xl font-extrabold text-slate-100">
-                <AnimatedCounter value={activeTraumaCount} />
-              </div>
-              <span className="text-[10px] text-red-400 font-bold uppercase tracking-wider block animate-pulse">
-                Trauma Stream Active
-              </span>
-            </div>
-            <div className="p-3 bg-red-500/10 text-red-400 rounded-2xl border border-red-500/20">
-              <Flame className="h-5 w-5 animate-pulse" />
-            </div>
-          </Card>
-
-          <Card className="p-5 flex items-center justify-between hover:border-white/20" hoverable>
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold text-red-400 uppercase tracking-widest">
-                Critical Tier (Red)
-              </span>
-              <div className="text-3xl font-extrabold text-red-400">
-                <AnimatedCounter value={criticalTierCount} />
-              </div>
-              <span className="text-[10px] text-red-400 font-bold uppercase tracking-wider block">
-                Needs disposition
-              </span>
-            </div>
-            <div className="p-3 bg-red-500/10 text-red-400 rounded-2xl border border-red-500/20">
-              <ShieldAlert className="h-5 w-5" />
-            </div>
-          </Card>
-
-          <Card className="p-5 flex items-center justify-between hover:border-white/20" hoverable>
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                Avg Treatment Time
-              </span>
-              <div className="text-3xl font-extrabold text-slate-100">
-                <AnimatedCounter value={34} />
-              </div>
-              <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider block">
-                -3m vs shift baseline
-              </span>
-            </div>
-            <div className="p-3 bg-emerald-500/10 text-emerald-400 rounded-2xl border border-emerald-500/20">
-              <Clock className="h-5 w-5" />
-            </div>
-          </Card>
-
-          <Card className="p-5 flex items-center justify-between hover:border-white/20" hoverable>
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                Cases Treated
-              </span>
-              <div className="text-3xl font-extrabold text-slate-100">
-                <AnimatedCounter value={18} />
-              </div>
-              <span className="text-[10px] text-blue-400 font-bold uppercase tracking-wider block">
-                Shift quota synced
-              </span>
-            </div>
-            <div className="p-3 bg-blue-500/10 text-blue-400 rounded-2xl border border-blue-500/20">
-              <Heart className="h-5 w-5" />
-            </div>
-          </Card>
-        </div>
-
-        {/* Dynamic Treatment Workspace Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          <div className="lg:col-span-2 space-y-4">
-            <h2 className="text-sm font-bold text-slate-300 uppercase tracking-widest flex items-center gap-1.5">
+    <PageTransition id="doctor-dashboard-page">
+      <div className="flex h-full w-full overflow-hidden">
+        {/* Left Column: Scrollable Patient list */}
+        <div className="w-[35%] min-w-[300px] border-r border-[#2a3040] bg-[#0c0e15] flex flex-col h-full shrink-0">
+          <div className="p-4 border-b border-[#2a3040] bg-[#10131d] space-y-1">
+            <h2 className="text-xs font-bold text-[#e8ecf4] uppercase tracking-widest flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-              High-Risk Physician Review Queue
+              Active Review Queue
             </h2>
-            
-            <Card className="overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-white/5 border-b border-white/10 text-slate-300 font-bold uppercase tracking-wider">
-                      <th className="p-3.5">ID</th>
-                      <th className="p-3.5">Clinician Patient Name</th>
-                      <th className="p-3.5">Complaint / Vitals</th>
-                      <th className="p-3.5">AI Risk Handshake</th>
-                      <th className="p-3.5 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {isLoading ? (
-                      <tr>
-                        <td colSpan={5} className="p-8 text-center text-slate-400 font-semibold font-mono animate-pulse">
-                          Querying live hospital system logs...
-                        </td>
-                      </tr>
-                    ) : emergencyQueue.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="p-8 text-center text-slate-400 font-medium">
-                          No emergency queue cases waiting.
-                        </td>
-                      </tr>
-                    ) : (
-                      emergencyQueue.map((item) => {
-                        const scoreVal = item.assessment?.risk_score || 0;
-                        const hr = item.visit.vitals?.heart_rate ? `${item.visit.vitals.heart_rate} bpm` : "N/A";
-                        const bp = item.visit.vitals?.systolic_bp && item.visit.vitals?.diastolic_bp 
-                          ? `${item.visit.vitals.systolic_bp}/${item.visit.vitals.diastolic_bp}` 
-                          : "N/A";
-                        
-                        return (
-                          <tr key={item.patient.patient_id} className="hover:bg-white/5 transition-colors">
-                            <td className="p-3.5 font-mono font-bold text-slate-400">
-                              {item.patient.patient_id}
-                            </td>
-                            <td className="p-3.5 font-bold text-slate-200">
-                              {item.patient.name || "Anonymous Intake"}
-                            </td>
-                            <td className="p-3.5 text-slate-400 font-medium">
-                              <div>{item.visit.chief_complaint || "No compliant logged"}</div>
-                              <div className="text-[10px] text-slate-400 mt-0.5 font-semibold uppercase">
-                                HR: {hr} • BP: {bp}
-                              </div>
-                            </td>
-                            <td className="p-3.5">
-                              <span className={`font-mono font-bold px-2.5 py-1 rounded-md text-[10px] ${
-                                scoreVal >= 80 ? "bg-red-500/10 text-red-400 border border-red-500/20" :
-                                "bg-orange-500/10 text-orange-400 border border-orange-500/20"
-                              }`}>
-                                {scoreVal}% Risk
-                              </span>
-                            </td>
-                            <td className="p-3.5 text-right">
-                              <Button
-                                size="xs"
-                                variant="outline"
-                                onClick={() => {
-                                  window.location.hash = `#/patient/${item.patient.patient_id}`;
-                                  addToast(`Loading Clinical Case Chart: ${item.patient.name}`, "success");
-                                }}
-                                className="group/btn"
-                              >
-                                <span>Manage Chart</span>
-                                <ChevronRight className="h-3 w-3 ml-1 group-hover/btn:translate-x-0.5 transition-transform" />
-                              </Button>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
+            <p className="text-[10px] text-[#8492a6] font-medium uppercase">
+              Emergency & General cases combined
+            </p>
           </div>
 
-          <div className="space-y-4">
-            <h2 className="text-sm font-bold text-slate-300 uppercase tracking-widest">
-              Physician Shortcuts
-            </h2>
-            <div className="space-y-3">
-              {doctorQuickActions.map((act) => (
-                <Card 
-                  key={act.title}
-                  onClick={() => {
-                    window.location.hash = act.hash;
-                    addToast(`Opening Clinician Subsystem: ${act.title}`, "info");
-                  }}
-                  className="p-4 bg-white/[0.03] hover:bg-white/[0.08] border-white/10 transition-all cursor-pointer flex gap-4 items-center group shadow-sm"
-                  hoverable
+          <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-thin">
+            {allPatients.map((item) => {
+              const isSelected = selectedItem?.visit.visit_id === item.visit.visit_id;
+              const hasTwinAlert = item.twin && ["DETERIORATING", "CRITICAL_ALERT"].includes(item.twin.alert_level);
+              return (
+                <Card
+                  key={item.visit.visit_id}
+                  onClick={() => setSelectedItem(item)}
+                  className={`p-3 cursor-pointer border transition-all ${
+                    isSelected
+                      ? "bg-[#1a1f2e] border-[hsl(220,85%,58%)] shadow-md shadow-blue-500/5"
+                      : "bg-[#10131d]/60 border-[#2a3040] hover:border-[#4a5060]"
+                  }`}
                 >
-                  <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 group-hover:bg-white/10 transition-all">
-                    {act.icon}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-xs font-bold text-slate-100 group-hover:text-blue-400 leading-tight">
-                      {act.title}
-                    </h3>
-                    <p className="text-[10px] text-slate-400 mt-1 truncate">
-                      {act.desc}
-                    </p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-slate-500 group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all" />
-                </Card>
-              ))}
-            </div>
-          </div>
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-bold text-sm text-[#e8ecf4] truncate">
+                        {item.patient.name}
+                      </span>
+                      <span className="text-xs text-[#8492a6] font-mono tabular shrink-0">
+                        {item.patient.age}y
+                      </span>
+                    </div>
 
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <PriorityBadge priority={item.assessment.priority_level} />
+                        <span className="text-[9px] font-mono text-[#8492a6] bg-white/5 border border-white/10 px-1.5 py-0.5 rounded">
+                          {item.visit.department_assigned}
+                        </span>
+                      </div>
+                      <span className="text-xs font-bold text-[#e8ecf4] font-mono">
+                        {item.assessment.risk_score.toFixed(0)}%
+                      </span>
+                    </div>
+
+                    {hasTwinAlert && (
+                      <div className="pt-1">
+                        <TwinAlertBadge alertLevel={item.twin?.alert_level} />
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
+
+            {allPatients.length === 0 && !queueLoading && (
+              <div className="py-8 text-center text-xs text-[#8492a6] italic">
+                No active patients in triage queue.
+              </div>
+            )}
+          </div>
         </div>
 
+        {/* Right Column: Case Details & XAI Panel */}
+        <div className="flex-1 bg-[#0f1117] flex flex-col h-full overflow-hidden">
+          {selectedItem ? (
+            <div className="flex-1 flex flex-col h-full overflow-hidden">
+              {/* Patient Profile Header */}
+              <div className="p-6 border-b border-[#2a3040] bg-[#1a1f2e]/20 flex justify-between items-start gap-4">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-xl font-bold text-[#e8ecf4]">
+                      {selectedItem.patient.name}
+                    </h2>
+                    <span className="text-xs font-mono text-[#8492a6]">
+                      ID: {selectedItem.patient.patient_id}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-[#8492a6]">
+                    <span>Gender: {selectedItem.patient.gender}</span>
+                    <span>•</span>
+                    <span>Age: {selectedItem.patient.age} years</span>
+                    <span>•</span>
+                    <span className="font-semibold text-[#e8ecf4]">
+                      Complaint: {selectedItem.visit.chief_complaint}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Status Command Buttons */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={actionLoading}
+                    onClick={() => setReassessOpen(!reassessOpen)}
+                  >
+                    Reassess Pain
+                  </Button>
+
+                  {selectedItem.visit.status === "Waiting" && (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={actionLoading}
+                      onClick={() => handleStatusChange("Attending")}
+                    >
+                      Mark Attending
+                    </Button>
+                  )}
+
+                  {selectedItem.visit.status === "Attending" && (
+                    <Button
+                      variant="success"
+                      size="sm"
+                      disabled={actionLoading}
+                      onClick={() => handleStatusChange("Completed")}
+                    >
+                      Complete Treatment
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Reassessment Panel Drawer */}
+              {reassessOpen && (
+                <div className="p-4 bg-[#1a1f2e] border-b border-[#2a3040] flex items-center justify-between gap-6">
+                  <form onSubmit={handleReassessSubmit} className="flex items-center gap-4 flex-1">
+                    <span className="text-xs font-medium text-[#8492a6] uppercase shrink-0">
+                      Reassess Pain Level:
+                    </span>
+                    <input
+                      type="range"
+                      min="1"
+                      max="10"
+                      value={tempPain}
+                      onChange={(e) => setTempPain(Number(e.target.value))}
+                      className="flex-1 accent-[hsl(220,85%,58%)] bg-[#0f1117] h-1.5 rounded-lg border border-[#2a3040] cursor-pointer"
+                    />
+                    <span className="text-sm font-bold text-[#e8ecf4] font-mono shrink-0">
+                      {tempPain}/10
+                    </span>
+                    <Button type="submit" size="sm" variant="success" disabled={actionLoading}>
+                      Submit
+                    </Button>
+                  </form>
+                  <Button size="sm" variant="ghost" onClick={() => setReassessOpen(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              )}
+
+              {/* Explainable AI workspace */}
+              <div className="flex-1 p-6 overflow-hidden">
+                <XAIPanel
+                  explanation={explanation}
+                  isLoading={expLoading}
+                  error={expError}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-[#8492a6] italic">
+              <User className="h-12 w-12 text-[#2a3040] mb-3" />
+              Select a patient from the review queue to inspect medical justifications.
+            </div>
+          )}
+        </div>
       </div>
     </PageTransition>
   );

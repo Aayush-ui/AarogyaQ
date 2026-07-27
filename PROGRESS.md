@@ -8,7 +8,7 @@
 ## Overall Completion
 
 `
-██████████████████████████░░░░░░░░░░░░░░  65%  [65 / 100 points]
+██████████████████████████████░░░░░░░░░░  75%  [75 / 100 points]
 `
 
 ---
@@ -23,8 +23,7 @@
 - [x] SQLAlchemy models (Patient, Visit, Assessment, Vitals, Orders, Departments)
 - [x] ARQ-000001 format unified patient ID system
 - [x] SQLite persistence with init_db() / seed_departments()
-- [x] Audit logging (udit.py)
-- [x] Audit logging ( udit.py)
+- [x] Audit logging (audit.py)
 - [x] Shift report aggregation (shift_report.py)
 
 ---
@@ -47,11 +46,11 @@
 `
 ████████████████████████████████░░░░░░░░  80%
 `
-- [x] Q-learning epsilon-greedy contextual bandit (l_agent.py)
+- [x] Q-learning epsilon-greedy contextual bandit (rl_agent.py)
 - [x] State space: (queue_type, time_of_day, queue_depth_bucket)
 - [x] Action space: {-5, -2, 0, +2, +5} threshold adjustments
 - [x] SLA-based reward function in [-1.0, +1.0]
-- [x] Q-table persisted in l_qtable.json
+- [x] Q-table persisted in rl_qtable.json
 - [x] REST endpoints: POST /rl/feedback, GET /rl/state, GET /rl/thresholds
 - [x] R-RL-01 — Auto-trigger RL feedback on visit completion
 - [ ] R-RL-02 — GET /rl/history endpoint + reward convergence chart
@@ -62,48 +61,48 @@
 
 ### 🟢 Digital Twin & Dynamic Prioritization
 `
-████████████████████████████░░░░░░░░░░░░  70%
+████████████████████████████████░░░░░░░░  80%
 `
 - [x] compute_twin_state() with physiology-based deterioration rates
 - [x] NEWS2/MEWS inspired alert levels: STABLE / MONITOR / DETERIORATING / CRITICAL_ALERT
-- [x] XAI reasons per alert level ( lert_reasons list)
+- [x] XAI reasons per alert level (alert_reasons list)
 - [x] GET /visits/{visit_id}/twin endpoint
 - [x] Twin state embedded in all queue responses
 - [x] R-DYN-01 — Queue re-sort by twin_priority on deterioration
 - [x] R-DYN-02 — Auto-reassessment trigger endpoint
-- [ ] R-DYN-03 — Visual deterioration urgency cues in Command Center
+- [x] R-DYN-03 — Visual deterioration urgency cues in Live Queue & Doctor reviews
 - [ ] R-DYN-04 — Mid-visit vitals patch and re-score
 
 ---
 
 ### 🟡 Frontend — Clinician Interfaces
 `
-████████████████████████████████░░░░░░░░  80%
+████████████████████████████████████████  100%  COMPLETE
 `
-- [x] 11 pages implemented (Login, Dashboard, NurseIntake, DoctorDashboard, CommandCenter, LiveQueue, ShiftReport, PatientHistory, AdminDashboard, DepartmentControl, NurseDashboard)
+- [x] Unified 7 pages implemented (Login, Dashboard, NurseIntake, DoctorDashboard, LiveQueue, ShiftReport, AdminDashboard)
 - [x] Zustand state stores (Patient, Queue, UI)
 - [x] Recharts data visualization in dashboards
 - [x] Motion micro-animations
 - [x] CPOE order entry (notes, medications, labs, radiology, bed, transfer)
-- [x] Hybrid API adapter with simulatedDb.ts fallback
-- [ ] R-XAI-01 — Reasoning Panel component in DoctorDashboard
-- [ ] R-XAI-03 — AI confidence score display in NurseIntake
-- [ ] R-SED-03 — AI toggle in NurseIntake with before/after symptom view
-- [ ] R-SED-04 — Role-based navigation enforcement in Login
+- [x] Clean direct API integrations without simulatedDb catch fallbacks
+- [x] R-XAI-01 — Reasoning Panel component in DoctorDashboard
+- [x] R-XAI-03 — AI confidence score display in NurseIntake
+- [x] R-SED-03 — AI toggle in NurseIntake with before/after symptom view
+- [x] R-SED-04 — Role-based navigation enforcement in Login
 
 ---
 
 ### 🔴 Explainability (XAI) — End-to-End
 `
-██████████████████████████░░░░░░░░░░░░░░  66%
+█████████████████████████████████░░░░░░░  83%
 `
 - [x] score_breakdown stored per assessment
 - [x] contributing_factors per assessment
 - [x] alert_reasons in Digital Twin
 - [x] confidence_scores per mapped symptom (stored)
-- [ ] R-XAI-01 — Reasoning Panel UI component
+- [x] R-XAI-01 — Reasoning Panel UI component
 - [x] R-XAI-02 — /explanation API endpoint
-- [ ] R-XAI-03 — Confidence score display in frontend
+- [x] R-XAI-03 — Confidence score display in frontend
 - [ ] R-XAI-04 — XAI export endpoint
 - [x] R-XAI-05 — Business flag human-readable descriptions
 
@@ -138,14 +137,14 @@
 
 | Change ID | Description | Status | Completed On |
 |-----------|-------------|--------|-------------|
-| R-XAI-01 | Reasoning Panel in DoctorDashboard | ⬜ Pending | — |
+| R-XAI-01 | Reasoning Panel in DoctorDashboard | ✅ Done | 2026-07-27 |
 | R-XAI-02 | /visits/{id}/explanation endpoint | ✅ Done | 2026-07-27 |
-| R-XAI-03 | AI confidence display in NurseIntake | ⬜ Pending | — |
+| R-XAI-03 | AI confidence display in NurseIntake | ✅ Done | 2026-07-27 |
 | R-XAI-04 | XAI export endpoint | ⬜ Pending | — |
 | R-XAI-05 | Business flag human descriptions | ✅ Done | 2026-07-27 |
 | R-DYN-01 | Queue re-sort by twin_priority | ✅ Done | 2026-07-27 |
 | R-DYN-02 | Auto-reassessment trigger endpoint | ✅ Done | 2026-07-27 |
-| R-DYN-03 | Deterioration urgency UI cues | ⬜ Pending | — |
+| R-DYN-03 | Deterioration urgency UI cues | ✅ Done | 2026-07-27 |
 | R-DYN-04 | Mid-visit vitals patch endpoint | ⬜ Pending | — |
 | R-RL-01 | Auto RL feedback on completion | ✅ Done | 2026-07-27 |
 | R-RL-02 | /rl/history + reward chart | ⬜ Pending | — |
@@ -154,8 +153,8 @@
 | R-RL-05 | Wire RL thresholds into triage | ✅ Done | 2026-07-27 |
 | R-SED-01 | SSE / WebSocket live queue | ⬜ Pending | — |
 | R-SED-02 | Throughput analytics charts | ⬜ Pending | — |
-| R-SED-03 | AI toggle in NurseIntake form | ⬜ Pending | — |
-| R-SED-04 | Role-based login enforcement | ⬜ Pending | — |
+| R-SED-03 | AI toggle in NurseIntake form | ✅ Done | 2026-07-27 |
+| R-SED-04 | Role-based login enforcement | ✅ Done | 2026-07-27 |
 | R-SEC-01 | Backend JWT auth + route protection | ⬜ Pending | — |
 | R-SEC-02 | Frontend real credential validation + JWT flow | ⬜ Pending | — |
 

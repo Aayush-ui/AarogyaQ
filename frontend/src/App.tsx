@@ -37,16 +37,12 @@ export default function App() {
           addToast("Navigation Hotkey: Switched to Main Desk", "info", 2000);
         } else if (key === "s") {
           e.preventDefault();
-          window.location.hash = "#/live";
-          addToast("Navigation Hotkey: Switched to Live Stream", "info", 2000);
+          window.location.hash = "#/queue";
+          addToast("Navigation Hotkey: Switched to Live Queue", "info", 2000);
         } else if (key === "n") {
           e.preventDefault();
-          window.location.hash = "#/nurse";
+          window.location.hash = "#/intake";
           addToast("Navigation Hotkey: Switched to Nurse Intake", "info", 2000);
-        } else if (key === "o") {
-          e.preventDefault();
-          window.location.hash = "#/command";
-          addToast("Navigation Hotkey: Switched to Operations Desk", "info", 2000);
         }
       }
     };
