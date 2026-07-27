@@ -47,3 +47,34 @@ def test_db(test_engine) -> Session:  # type: ignore[type-arg]
     finally:
         session.rollback()
         session.close()
+
+
+@pytest.fixture(scope="function", autouse=True)
+def isolate_rl_qtable(tmp_path):
+    """Isolate the RL agent Q-table file for each test to avoid mutating the real config and cross-test contamination."""
+    import json
+    import aarogyaq.rl_agent as rl_agent
+
+    # Create a fresh, isolated temporary config file
+    temp_file = tmp_path / "rl_qtable.json"
+
+    # Initialise with clean default agent state
+    default_state = {
+        "version": 1,
+        "epsilon": 0.2,
+        "episodes": 0,
+        "qtable": {},
+        "threshold_offsets": {
+            "Emergency": 0,
+            "General": 0
+        }
+    }
+
+    with open(temp_file, "w", encoding="utf-8") as f:
+        json.dump(default_state, f)
+
+    original_path = rl_agent._QTABLE_PATH
+    rl_agent._QTABLE_PATH = temp_file
+    yield
+    rl_agent._QTABLE_PATH = original_path
+
