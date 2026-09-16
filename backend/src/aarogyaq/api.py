@@ -245,7 +245,36 @@ async def register(data: RegisterRequest, db: Session = Depends(get_db)):
         existing_conditions=data.existing_conditions,  # FIX: was data.symptoms (wrong field)
         vitals_data=vitals_data,
     )
-    return assess_patient(db, v.visit_id, data.use_ai, symptoms=data.symptoms)
+    res = assess_patient(db, v.visit_id, data.use_ai, symptoms=data.symptoms)
+
+    score_breakdown_dict = {}
+    if isinstance(res.get("score_breakdown"), list):
+        for r in res["score_breakdown"]:
+            if isinstance(r, dict) and "rule_id" in r:
+                score_breakdown_dict[r.get("label") or r["rule_id"]] = r.get("score_modifier") or r.get("points") or 10
+            elif isinstance(r, str):
+                score_breakdown_dict[r] = 10
+    elif isinstance(res.get("score_breakdown"), dict):
+        score_breakdown_dict = res["score_breakdown"]
+
+    res["patient"] = {
+        "patient_id": p.patient_id,
+        "name": p.name,
+        "age": p.age,
+        "gender": p.gender,
+        "phone": p.phone,
+    }
+    res["visit"] = visit_to_dict(v)
+    res["assessment"] = {
+        "risk_score": res["risk_score"],
+        "priority_level": res["priority_level"],
+        "mapped_symptoms": res["mapped_symptoms"],
+        "confidence_scores": res["confidence_scores"],
+        "contributing_factors": res["contributing_factors"],
+        "score_breakdown": score_breakdown_dict,
+    }
+    res["summary_text"] = res.get("summary", "")
+    return res
 
 @router.get("/queue/emergency")
 async def get_emergency(db: Session = Depends(get_db)):
