@@ -17,6 +17,21 @@ export async function reassessVisit(visitId: string, painLevel: number): Promise
   return response.data;
 }
 
+export async function patchVisitVitals(
+  visitId: string,
+  vitals: {
+    heart_rate?: number;
+    systolic_bp?: number;
+    diastolic_bp?: number;
+    spo2?: number;
+    temperature?: number;
+    respiratory_rate?: number;
+  }
+): Promise<any> {
+  const response = await apiClient.patch(`/visits/${visitId}/vitals`, vitals);
+  return response.data;
+}
+
 export async function addClinicalNote(visitId: string, author: string, note: string): Promise<void> {
   await apiClient.post(`/visits/${visitId}/notes`, { author, note });
 }

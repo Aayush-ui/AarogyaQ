@@ -33,3 +33,19 @@ export async function getPatientHistory(patientId: string): Promise<TriageQueueI
   const response = await apiClient.get<TriageQueueItem[]>(`/patients/${patientId}/history`);
   return response.data;
 }
+
+export async function patchVisitVitals(
+  visitId: string | number,
+  vitals: {
+    heart_rate?: number;
+    systolic_bp?: number;
+    diastolic_bp?: number;
+    spo2?: number;
+    temperature?: number;
+    respiratory_rate?: number;
+  }
+): Promise<any> {
+  const response = await apiClient.patch(`/visits/${visitId}/vitals`, vitals);
+  return response.data;
+}
+

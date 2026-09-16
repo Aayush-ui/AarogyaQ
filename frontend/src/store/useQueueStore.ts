@@ -6,7 +6,7 @@
 import { create } from "zustand";
 import { TriageQueueItem, Department } from "../types";
 import { getEmergencyQueue, getGeneralQueue, getStaleQueue } from "../api/queue";
-import { updateVisitStatus, reassessVisit } from "../api/visits";
+import { updateVisitStatus, reassessVisit, patchVisitVitals } from "../api/visits";
 import { getDepartments, updateDepartmentStatus, getHealthCheck } from "../api/analytics";
 import { useUIStore } from "./useUIStore";
 
@@ -24,6 +24,17 @@ interface QueueState {
   fetchDepartments: () => Promise<void>;
   updatePatientStatus: (visitId: string, status: string) => Promise<void>;
   reassessPatient: (visitId: string, painLevel: number) => Promise<void>;
+  updatePatientVitals: (
+    visitId: string,
+    vitals: {
+      heart_rate?: number;
+      systolic_bp?: number;
+      diastolic_bp?: number;
+      spo2?: number;
+      temperature?: number;
+      respiratory_rate?: number;
+    }
+  ) => Promise<void>;
   updateDeptStatus: (deptName: string, status: string) => Promise<void>;
 }
 
@@ -123,6 +134,24 @@ export const useQueueStore = create<QueueState>((set, get) => ({
       await get().fetchDepartments();
     } catch (err) {
       uiStore.addToast("Failed to reassess patient", "error");
+      console.error(err);
+    }
+  },
+
+  updatePatientVitals: async (visitId, vitals) => {
+    const uiStore = useUIStore.getState();
+    try {
+      const updated = await patchVisitVitals(visitId, vitals);
+      const risk = updated?.assessment?.risk_score ?? "--";
+      const prio = updated?.assessment?.priority_level ?? "";
+      uiStore.addToast(
+        `Vitals updated & patient re-assessed. New Risk: ${risk}% (${prio})`,
+        "info"
+      );
+      await get().fetchQueues(true);
+      await get().fetchDepartments();
+    } catch (err) {
+      uiStore.addToast("Failed to update patient vitals", "error");
       console.error(err);
     }
   },

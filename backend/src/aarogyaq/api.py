@@ -8,7 +8,7 @@ import logging
 import json
 
 from aarogyaq.database import get_db
-from aarogyaq.models import VisitOut, AssessmentOut, DepartmentOut, Visit, Department, Patient, ClinicalNote, MedicationOrder, LabOrder, RadiologyOrder
+from aarogyaq.models import VisitOut, AssessmentOut, DepartmentOut, Visit, Department, Patient, ClinicalNote, MedicationOrder, LabOrder, RadiologyOrder, Vitals
 from aarogyaq.patient_intake import register_patient
 from aarogyaq.orchestrator import assess_patient, reassess_patient
 from aarogyaq.queue_manager import get_emergency_queue, get_general_queue, get_stale_patients, update_visit_status
@@ -438,6 +438,80 @@ async def reassess(visit_id: int, data: ReassessRequest, db: Session = Depends(g
         return reassess_patient(db, visit_id, data.chief_complaint, data.pain_level, data.use_ai)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+@router.patch("/visits/{visit_id}/vitals")
+async def patch_visit_vitals(visit_id: int, data: VitalsPayload, db: Session = Depends(get_db)):
+    """Update or record mid-visit physiological vitals and trigger dynamic re-assessment."""
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(status_code=404, detail=f"Visit {visit_id} not found")
+
+    vitals = visit.vitals
+    if vitals is None:
+        vitals = Vitals(
+            visit_id=visit_id,
+            heart_rate=data.heart_rate,
+            systolic_bp=data.systolic_bp,
+            diastolic_bp=data.diastolic_bp,
+            respiratory_rate=data.respiratory_rate,
+            spo2=data.spo2,
+            temperature=data.temperature,
+            logged_at=datetime.utcnow(),
+        )
+        db.add(vitals)
+    else:
+        if data.heart_rate is not None:
+            vitals.heart_rate = data.heart_rate
+        if data.systolic_bp is not None:
+            vitals.systolic_bp = data.systolic_bp
+        if data.diastolic_bp is not None:
+            vitals.diastolic_bp = data.diastolic_bp
+        if data.respiratory_rate is not None:
+            vitals.respiratory_rate = data.respiratory_rate
+        if data.spo2 is not None:
+            vitals.spo2 = data.spo2
+        if data.temperature is not None:
+            vitals.temperature = data.temperature
+        vitals.logged_at = datetime.utcnow()
+
+    db.flush()
+
+    # Trigger re-assessment using existing chief complaint and pain level
+    reassessment_res = reassess_patient(
+        db,
+        visit_id=visit_id,
+        new_chief_complaint=visit.chief_complaint,
+        new_pain_level=visit.pain_level,
+    )
+
+    from aarogyaq.audit import write_log
+    write_log(
+        db,
+        visit_id=visit_id,
+        actor="nurse",
+        action="VITALS_UPDATED",
+        notes=f"Mid-visit vitals updated: HR={vitals.heart_rate}, BP={vitals.systolic_bp}/{vitals.diastolic_bp}, SpO2={vitals.spo2}%",
+    )
+
+    latest_assessment = max(visit.assessments, key=lambda a: a.assessment_id) if visit.assessments else None
+    twin_state = twin_for_visit(visit, latest_assessment)
+
+    return {
+        "status": "success",
+        "visit_id": visit_id,
+        "vitals": {
+            "vital_id": vitals.vital_id,
+            "heart_rate": vitals.heart_rate,
+            "systolic_bp": vitals.systolic_bp,
+            "diastolic_bp": vitals.diastolic_bp,
+            "respiratory_rate": vitals.respiratory_rate,
+            "spo2": vitals.spo2,
+            "temperature": vitals.temperature,
+            "logged_at": vitals.logged_at.isoformat() if vitals.logged_at else None,
+        },
+        "assessment": assessment_to_dict(latest_assessment) if latest_assessment else reassessment_res,
+        "twin": twin_state,
+    }
 
 @router.get("/patients/{patient_id}/history")
 async def patient_history(patient_id: str, db: Session = Depends(get_db)):

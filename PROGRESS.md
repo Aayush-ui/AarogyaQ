@@ -8,7 +8,7 @@
 ## Overall Completion
 
 `
-██████████████████████████████░░░░░░░░░░  75%  [75 / 100 points]
+████████████████████████████████░░░░░░░░  80%  [80 / 100 points]
 `
 
 ---
@@ -61,7 +61,7 @@
 
 ### 🟢 Digital Twin & Dynamic Prioritization
 `
-████████████████████████████████░░░░░░░░  80%
+████████████████████████████████████████  100%  COMPLETE
 `
 - [x] compute_twin_state() with physiology-based deterioration rates
 - [x] NEWS2/MEWS inspired alert levels: STABLE / MONITOR / DETERIORATING / CRITICAL_ALERT
@@ -71,7 +71,7 @@
 - [x] R-DYN-01 — Queue re-sort by twin_priority on deterioration
 - [x] R-DYN-02 — Auto-reassessment trigger endpoint
 - [x] R-DYN-03 — Visual deterioration urgency cues in Live Queue & Doctor reviews
-- [ ] R-DYN-04 — Mid-visit vitals patch and re-score
+- [x] R-DYN-04 — Mid-visit vitals patch and re-score
 
 ---
 
@@ -145,7 +145,7 @@
 | R-DYN-01 | Queue re-sort by twin_priority | ✅ Done | 2026-07-27 |
 | R-DYN-02 | Auto-reassessment trigger endpoint | ✅ Done | 2026-07-27 |
 | R-DYN-03 | Deterioration urgency UI cues | ✅ Done | 2026-07-27 |
-| R-DYN-04 | Mid-visit vitals patch endpoint | ⬜ Pending | — |
+| R-DYN-04 | Mid-visit vitals patch endpoint | ✅ Done | 2026-09-16 |
 | R-RL-01 | Auto RL feedback on completion | ✅ Done | 2026-07-27 |
 | R-RL-02 | /rl/history + reward chart | ⬜ Pending | — |
 | R-RL-03 | Document bandit constraint | ⬜ Pending | — |
@@ -166,4 +166,4 @@
 - Total tracked change IDs: **20** (18 original + R-SEC-01, R-SEC-02 added 2026-07-27).
 - Scores are re-evaluated after each major task or bulk completion event, or at minimum every 2 days.
 - See [REVISED.md](REVISED.md) for full gap analysis and per-change rationale.
-- Passing test suite confirms backend correctness at each milestone: **149 tests / 0 failures**.
+- Passing test suite confirms backend correctness at each milestone: **153 tests / 0 failures**.

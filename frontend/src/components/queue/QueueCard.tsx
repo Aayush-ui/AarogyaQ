@@ -23,12 +23,16 @@ interface QueueCardProps {
 }
 
 export const QueueCard: React.FC<QueueCardProps> = ({ item, id }) => {
-  const { updatePatientStatus, reassessPatient } = useQueueStore();
+  const { updatePatientStatus, reassessPatient, updatePatientVitals } = useQueueStore();
   const { selectPatient } = usePatientStore();
   
   const [isExpanded, setIsExpanded] = useState(false);
   const [isReassessing, setIsReassessing] = useState(false);
   const [tempPain, setTempPain] = useState(item.visit.pain_level);
+  const [spo2, setSpo2] = useState<string>(item.visit.vitals?.spo2 ? String(item.visit.vitals.spo2) : "");
+  const [heartRate, setHeartRate] = useState<string>(item.visit.vitals?.heart_rate ? String(item.visit.vitals.heart_rate) : "");
+  const [systolicBp, setSystolicBp] = useState<string>(item.visit.vitals?.systolic_bp ? String(item.visit.vitals.systolic_bp) : "");
+  const [diastolicBp, setDiastolicBp] = useState<string>(item.visit.vitals?.diastolic_bp ? String(item.visit.vitals.diastolic_bp) : "");
   const [minutesWaiting, setMinutesWaiting] = useState(0);
 
   // Parse patient and visit fields
@@ -63,9 +67,20 @@ export const QueueCard: React.FC<QueueCardProps> = ({ item, id }) => {
     updatePatientStatus(visit_id, newStatus);
   };
 
-  const handleReassessSubmit = (e: React.FormEvent) => {
+  const handleReassessSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    reassessPatient(visit_id, tempPain);
+    const hasVitalsInput = spo2 || heartRate || systolicBp || diastolicBp;
+    if (hasVitalsInput) {
+      await updatePatientVitals(visit_id, {
+        spo2: spo2 ? Number(spo2) : undefined,
+        heart_rate: heartRate ? Number(heartRate) : undefined,
+        systolic_bp: systolicBp ? Number(systolicBp) : undefined,
+        diastolic_bp: diastolicBp ? Number(diastolicBp) : undefined,
+      });
+    }
+    if (tempPain !== item.visit.pain_level || !hasVitalsInput) {
+      await reassessPatient(visit_id, tempPain);
+    }
     setIsReassessing(false);
   };
 
@@ -272,6 +287,50 @@ export const QueueCard: React.FC<QueueCardProps> = ({ item, id }) => {
                           onChange={(e) => setTempPain(Number(e.target.value))}
                           className="w-full accent-blue-500 bg-white/10 h-1 rounded-lg"
                         />
+                      </div>
+
+                      {/* Mid-visit Vitals Inputs */}
+                      <div className="grid grid-cols-3 gap-2 pt-1 border-t border-white/5">
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-semibold block mb-0.5">SpO₂ (%)</label>
+                          <input
+                            type="number"
+                            placeholder="e.g. 96"
+                            value={spo2}
+                            onChange={(e) => setSpo2(e.target.value)}
+                            className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-slate-200 focus:border-blue-500 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-semibold block mb-0.5">Heart Rate</label>
+                          <input
+                            type="number"
+                            placeholder="e.g. 80"
+                            value={heartRate}
+                            onChange={(e) => setHeartRate(e.target.value)}
+                            className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-slate-200 focus:border-blue-500 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-400 font-semibold block mb-0.5">BP (Sys/Dia)</label>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              placeholder="120"
+                              value={systolicBp}
+                              onChange={(e) => setSystolicBp(e.target.value)}
+                              className="w-1/2 bg-white/5 border border-white/10 rounded px-1.5 py-1 text-xs text-slate-200 focus:border-blue-500 outline-none"
+                            />
+                            <span className="text-slate-500 text-xs">/</span>
+                            <input
+                              type="number"
+                              placeholder="80"
+                              value={diastolicBp}
+                              onChange={(e) => setDiastolicBp(e.target.value)}
+                              className="w-1/2 bg-white/5 border border-white/10 rounded px-1.5 py-1 text-xs text-slate-200 focus:border-blue-500 outline-none"
+                            />
+                          </div>
+                        </div>
                       </div>
 
                       <Button variant="success" size="sm" type="submit" className="w-full">
