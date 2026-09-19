@@ -158,6 +158,7 @@
 | R-SED-04 | Role-based login enforcement | ✅ Done | 2026-07-27 |
 | R-SEC-01 | Backend JWT auth + route protection | ✅ Done | 2026-09-20 |
 | R-SEC-02 | Frontend real credential validation + JWT flow | ✅ Done | 2026-09-20 |
+| R-FIX-01 | Web app, XAI Panel, and Shift Ledger stabilization | ✅ Done | 2026-09-20 |
 
 ---
 

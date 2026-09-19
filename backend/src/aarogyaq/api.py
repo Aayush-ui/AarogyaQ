@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional, Any
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import json
 
@@ -127,10 +127,15 @@ class BusinessOverrideExplanation(BaseModel):
     explanation: str
 
 class ExplanationResponse(BaseModel):
+    visit_id: int
+    risk_score: float
+    priority_level: str
+    contributing_factors: List[str]
     rule_breakdown: List[dict]
     business_overrides: List[BusinessOverrideExplanation]
     twin_alert_reasons: List[str]
     rl_threshold_at_time: dict[str, List[float]]
+    rl_threshold_at_assessment: dict[str, List[float]] = {}
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -429,11 +434,18 @@ async def get_visit_explanation(visit_id: int, db: Session = Depends(get_db)):
         k: [v[0], v[1]] for k, v in raw_thresholds.items()
     }
     
+    contributing_factors = json.loads(latest_assessment.contributing_factors) if latest_assessment.contributing_factors else []
+
     return ExplanationResponse(
+        visit_id=visit_id,
+        risk_score=float(latest_assessment.risk_score or 0.0),
+        priority_level=latest_assessment.priority_level or "Low",
+        contributing_factors=contributing_factors,
         rule_breakdown=rule_breakdown,
         business_overrides=business_overrides,
         twin_alert_reasons=twin_alert_reasons,
-        rl_threshold_at_time=rl_threshold_at_time
+        rl_threshold_at_time=rl_threshold_at_time,
+        rl_threshold_at_assessment=rl_threshold_at_time
     )
 
 @router.get("/visits/{visit_id}/export")
@@ -672,10 +684,15 @@ async def patient_history(patient_id: str, db: Session = Depends(get_db)):
 from aarogyaq.shift_report import generate_shift_report
 
 @router.get("/shift/report")
-async def shift_report(shift_start: str, shift_end: str, db: Session = Depends(get_db)):
+async def shift_report(
+    shift_start: Optional[str] = None,
+    shift_end: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
     try:
-        s_dt = datetime.fromisoformat(shift_start)
-        e_dt = datetime.fromisoformat(shift_end)
+        now = datetime.utcnow()
+        s_dt = datetime.fromisoformat(shift_start) if shift_start else (now - timedelta(hours=12))
+        e_dt = datetime.fromisoformat(shift_end) if shift_end else now
         return generate_shift_report(db, s_dt, e_dt)
     except ValueError as e:
         raise HTTPException(status_code=422, detail="Invalid datetime format")

@@ -4,13 +4,15 @@
  */
 
 import apiClient from "./client";
-import { Department, ShiftReportData } from "../types";
+import { Department, ShiftReportData, RawShiftReport } from "../types";
 
-export async function getShiftReport(shiftStart?: string, shiftEnd?: string): Promise<ShiftReportData> {
+export async function getShiftReport(shiftStart?: string, shiftEnd?: string): Promise<RawShiftReport> {
   const params = new URLSearchParams();
   if (shiftStart) params.append("shift_start", shiftStart);
   if (shiftEnd) params.append("shift_end", shiftEnd);
-  const response = await apiClient.get<ShiftReportData>(`/shift/report?${params.toString()}`);
+  const qs = params.toString();
+  const url = qs ? `/shift/report?${qs}` : "/shift/report";
+  const response = await apiClient.get<RawShiftReport>(url);
   return response.data;
 }
 

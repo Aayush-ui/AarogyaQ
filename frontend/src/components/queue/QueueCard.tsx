@@ -69,19 +69,28 @@ export const QueueCard: React.FC<QueueCardProps> = ({ item, id }) => {
 
   const handleReassessSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const hasVitalsInput = spo2 || heartRate || systolicBp || diastolicBp;
-    if (hasVitalsInput) {
-      await updatePatientVitals(visit_id, {
-        spo2: spo2 ? Number(spo2) : undefined,
-        heart_rate: heartRate ? Number(heartRate) : undefined,
-        systolic_bp: systolicBp ? Number(systolicBp) : undefined,
-        diastolic_bp: diastolicBp ? Number(diastolicBp) : undefined,
-      });
+    const hasVitalsInput = Boolean(
+      (spo2 && !isNaN(Number(spo2))) ||
+      (heartRate && !isNaN(Number(heartRate))) ||
+      (systolicBp && !isNaN(Number(systolicBp))) ||
+      (diastolicBp && !isNaN(Number(diastolicBp)))
+    );
+
+    try {
+      if (hasVitalsInput) {
+        await updatePatientVitals(visit_id, {
+          spo2: spo2 ? Number(spo2) : undefined,
+          heart_rate: heartRate ? Number(heartRate) : undefined,
+          systolic_bp: systolicBp ? Number(systolicBp) : undefined,
+          diastolic_bp: diastolicBp ? Number(diastolicBp) : undefined,
+        });
+      }
+      if (tempPain !== item.visit.pain_level || !hasVitalsInput) {
+        await reassessPatient(visit_id, tempPain);
+      }
+    } finally {
+      setIsReassessing(false);
     }
-    if (tempPain !== item.visit.pain_level || !hasVitalsInput) {
-      await reassessPatient(visit_id, tempPain);
-    }
-    setIsReassessing(false);
   };
 
   return (

@@ -46,6 +46,7 @@ def generate_shift_report(
             "Emergency": 0,
             "General": 0
         },
+        "by_department": {},
         "avg_wait_time_minutes": None,
         "longest_wait_minutes": None,
         "patients_completed": 0,
@@ -59,6 +60,10 @@ def generate_shift_report(
     wait_times = []
     
     for v in visits:
+        # Department stats
+        dept = v.department_assigned or "General / Triage"
+        report["by_department"][dept] = report["by_department"].get(dept, 0) + 1
+
         # Queue stats
         if v.queue_type in report["by_queue"]:
             report["by_queue"][v.queue_type] += 1

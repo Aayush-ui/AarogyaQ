@@ -51,15 +51,49 @@ export const XAIPanel: React.FC<XAIPanelProps> = ({ explanation, isLoading, erro
     );
   }
 
-  const {
-    risk_score,
-    priority_level,
-    rule_breakdown,
-    contributing_factors,
-    business_overrides,
-    twin_alert_reasons,
-    rl_threshold_at_assessment,
-  } = explanation;
+  const risk_score = explanation.risk_score ?? 0;
+  const priority_level = explanation.priority_level || "Low";
+  const contributing_factors = Array.isArray(explanation.contributing_factors) ? explanation.contributing_factors : [];
+  const twin_alert_reasons = Array.isArray(explanation.twin_alert_reasons) ? explanation.twin_alert_reasons : [];
+  const thresholds = explanation.rl_threshold_at_assessment || explanation.rl_threshold_at_time || {};
+
+  // Support both Record<string, number> and Array<{ rule_id?, label?, points?, score_modifier? }>
+  const parsedRules: { code: string; label: string; points: number }[] = [];
+  if (Array.isArray(explanation.rule_breakdown)) {
+    explanation.rule_breakdown.forEach((item: any, idx: number) => {
+      if (typeof item === "object" && item !== null) {
+        const code = item.rule_id || item.code || `CR-0${idx + 1}`;
+        const label = item.rule_name || item.label || item.descriptor || "Clinical Indicator Fired";
+        const points = item.score_modifier ?? item.points ?? 10;
+        parsedRules.push({ code, label, points });
+      } else {
+        parsedRules.push({ code: `RULE-${idx + 1}`, label: String(item), points: 10 });
+      }
+    });
+  } else if (explanation.rule_breakdown && typeof explanation.rule_breakdown === "object") {
+    Object.entries(explanation.rule_breakdown).forEach(([ruleId, pts]) => {
+      const match = contributing_factors.find((f) => f.includes(ruleId));
+      const label = match ? match.replace(ruleId + ":", "").trim() : "Clinical Indicator Fired";
+      parsedRules.push({ code: ruleId, label, points: Number(pts) || 0 });
+    });
+  }
+
+  // Support both Record<string, string> and Array<{ flag, explanation }>
+  const parsedOverrides: { flag: string; desc: string }[] = [];
+  if (Array.isArray(explanation.business_overrides)) {
+    explanation.business_overrides.forEach((item: any) => {
+      if (typeof item === "object" && item !== null) {
+        parsedOverrides.push({
+          flag: item.flag || "SAFETY_OVERRIDE",
+          desc: item.explanation || item.desc || "Clinical Safety Rule Activated",
+        });
+      }
+    });
+  } else if (explanation.business_overrides && typeof explanation.business_overrides === "object") {
+    Object.entries(explanation.business_overrides).forEach(([flag, desc]) => {
+      parsedOverrides.push({ flag, desc: String(desc) });
+    });
+  }
 
   const priorityColorClass = 
     priority_level === "Critical" ? "text-red-500" :
@@ -76,7 +110,7 @@ export const XAIPanel: React.FC<XAIPanelProps> = ({ explanation, isLoading, erro
             Dynamic Risk Score
           </span>
           <div className="flex items-baseline gap-1.5">
-            <span className="text-3xl font-extrabold text-[#e8ecf4]">{risk_score.toFixed(1)}</span>
+            <span className="text-3xl font-extrabold text-[#e8ecf4]">{(risk_score ?? 0).toFixed(1)}</span>
             <span className="text-xs text-[#8492a6]">/ 100</span>
           </div>
         </div>
@@ -106,18 +140,14 @@ export const XAIPanel: React.FC<XAIPanelProps> = ({ explanation, isLoading, erro
               </tr>
             </thead>
             <tbody className="divide-y divide-[#2a3040]/30 text-[#e8ecf4]">
-              {Object.entries(rule_breakdown).map(([ruleId, pts]) => {
-                // Find descriptive label matches if any
-                const label = contributing_factors.find((f) => f.includes(ruleId)) || "Clinical Indicator Fired";
-                return (
-                  <tr key={ruleId}>
-                    <td className="py-3 px-4 font-mono font-bold">{ruleId}</td>
-                    <td className="py-3 px-4">{label.replace(ruleId + ":", "").trim()}</td>
-                    <td className="py-3 px-4 text-right font-mono font-bold text-blue-400">+{pts}</td>
-                  </tr>
-                );
-              })}
-              {Object.keys(rule_breakdown).length === 0 && (
+              {parsedRules.map((rule, idx) => (
+                <tr key={`${rule.code}-${idx}`}>
+                  <td className="py-3 px-4 font-mono font-bold">{rule.code}</td>
+                  <td className="py-3 px-4">{rule.label}</td>
+                  <td className="py-3 px-4 text-right font-mono font-bold text-blue-400">+{rule.points}</td>
+                </tr>
+              ))}
+              {parsedRules.length === 0 && (
                 <tr>
                   <td colSpan={3} className="py-4 text-center text-[#8492a6] italic">
                     No clinical rules fired. Defaulting to baseline.
@@ -135,14 +165,14 @@ export const XAIPanel: React.FC<XAIPanelProps> = ({ explanation, isLoading, erro
           <ShieldAlert className="h-4 w-4 text-orange-400" />
           Safety Override Flags (Layer 3)
         </h4>
-        {Object.keys(business_overrides).length > 0 ? (
+        {parsedOverrides.length > 0 ? (
           <div className="space-y-2">
-            {Object.entries(business_overrides).map(([flag, desc]) => (
-              <div key={flag} className="p-3 bg-orange-500/10 border border-orange-500/20 rounded-xl space-y-1">
+            {parsedOverrides.map((ov, idx) => (
+              <div key={`${ov.flag}-${idx}`} className="p-3 bg-orange-500/10 border border-orange-500/20 rounded-xl space-y-1">
                 <div className="text-[10px] font-bold text-orange-400 uppercase tracking-wider font-mono">
-                  ⚠ {flag}
+                  ⚠ {ov.flag}
                 </div>
-                <div className="text-xs text-[#e8ecf4] leading-relaxed">{desc}</div>
+                <div className="text-xs text-[#e8ecf4] leading-relaxed">{ov.desc}</div>
               </div>
             ))}
           </div>
@@ -192,8 +222,9 @@ export const XAIPanel: React.FC<XAIPanelProps> = ({ explanation, isLoading, erro
               </tr>
             </thead>
             <tbody className="divide-y divide-[#2a3040]/30 text-[#e8ecf4]">
-              {Object.entries(rl_threshold_at_assessment).map(([lvl, range]) => {
+              {Object.entries(thresholds).map(([lvl, range]) => {
                 const isCurrent = lvl === priority_level;
+                const rangeStr = Array.isArray(range) ? `${range[0]} - ${range[1]}` : String(range);
                 return (
                   <tr key={lvl} className={isCurrent ? "bg-emerald-500/5 font-bold" : ""}>
                     <td className="py-2.5 px-4 flex items-center gap-2">
@@ -206,7 +237,7 @@ export const XAIPanel: React.FC<XAIPanelProps> = ({ explanation, isLoading, erro
                       {lvl}
                     </td>
                     <td className="py-2.5 px-4 text-right font-mono">
-                      {range[0]} - {range[1]}
+                      {rangeStr}
                     </td>
                   </tr>
                 );

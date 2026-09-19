@@ -34,8 +34,41 @@ export const ShiftReport: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const report = await getShiftReport();
-      setData(report);
+      const raw = await getShiftReport();
+      const byPriority = raw.by_priority || { Critical: 0, High: 0, Medium: 0, Low: 0 };
+      const byQueue = raw.by_queue || { Emergency: 0, General: 0 };
+      const byDept = raw.by_department || {};
+
+      const priority_distribution = [
+        { name: "Critical", value: byPriority.Critical || 0 },
+        { name: "High", value: byPriority.High || 0 },
+        { name: "Medium", value: byPriority.Medium || 0 },
+        { name: "Low", value: byPriority.Low || 0 },
+      ];
+
+      const queue_distribution = [
+        { name: "Emergency", value: byQueue.Emergency || 0 },
+        { name: "General", value: byQueue.General || 0 },
+      ];
+
+      const department_workload = Object.keys(byDept).length > 0
+        ? Object.entries(byDept).map(([name, count]) => ({ name, count }))
+        : [
+            { name: "Emergency Care", count: byQueue.Emergency || 0 },
+            { name: "General Medicine", count: byQueue.General || 0 },
+          ];
+
+      const normalized: ShiftReportData = {
+        total_patients: raw.total_patients || 0,
+        critical_count: byPriority.Critical || 0,
+        avg_wait_time: raw.avg_wait_time_minutes ?? 0,
+        longest_wait_time: raw.longest_wait_minutes ?? 0,
+        priority_distribution,
+        queue_distribution,
+        department_workload,
+        raw,
+      };
+      setData(normalized);
     } catch (err: any) {
       console.error(err);
       setError("Failed to retrieve shift analytics from FastAPI.");
@@ -54,16 +87,16 @@ export const ShiftReport: React.FC = () => {
 
     const csvRows = [
       ["Metric", "Value"],
-      ["Total Patients", data.total_patients],
-      ["Critical Count", data.critical_count],
-      ["Avg Wait Time (mins)", data.avg_wait_time],
-      ["Longest Wait Time (mins)", data.longest_wait_time],
+      ["Total Patients", String(data.total_patients)],
+      ["Critical Count", String(data.critical_count)],
+      ["Avg Wait Time (mins)", data.avg_wait_time ? data.avg_wait_time.toFixed(1) : "0.0"],
+      ["Longest Wait Time (mins)", data.longest_wait_time ? data.longest_wait_time.toFixed(1) : "0.0"],
       [],
       ["Priority Level", "Patient Count"],
-      ...data.priority_distribution.map((p) => [p.name, p.value]),
+      ...data.priority_distribution.map((p) => [p.name, String(p.value)]),
       [],
       ["Department", "Routing Workload"],
-      ...data.department_workload.map((d) => [d.name, d.count]),
+      ...data.department_workload.map((d) => [d.name, String(d.count)]),
     ];
 
     const csvContent = "data:text/csv;charset=utf-8," 
@@ -172,7 +205,7 @@ export const ShiftReport: React.FC = () => {
                 <span className="text-[10px] font-bold text-[#8492a6] uppercase tracking-wide">
                   Avg Wait Time
                 </span>
-                <div className="text-2xl font-bold text-[#e8ecf4]">{data.avg_wait_time.toFixed(1)}m</div>
+                <div className="text-2xl font-bold text-[#e8ecf4]">{(data.avg_wait_time ?? 0).toFixed(1)}m</div>
               </div>
               <Timer className="h-5 w-5 text-yellow-400" />
             </div>
@@ -184,7 +217,7 @@ export const ShiftReport: React.FC = () => {
                 <span className="text-[10px] font-bold text-[#8492a6] uppercase tracking-wide">
                   Longest Wait Time
                 </span>
-                <div className="text-2xl font-bold text-[#e8ecf4]">{data.longest_wait_time}m</div>
+                <div className="text-2xl font-bold text-[#e8ecf4]">{(data.longest_wait_time ?? 0).toFixed(1)}m</div>
               </div>
               <FileText className="h-5 w-5 text-emerald-400" />
             </div>

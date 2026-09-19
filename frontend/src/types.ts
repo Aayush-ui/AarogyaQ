@@ -76,6 +76,28 @@ export interface Department {
   wait_time_mins: number;
 }
 
+export interface RawShiftReport {
+  shift_start: string;
+  shift_end: string;
+  total_patients: number;
+  by_priority: {
+    Critical: number;
+    High: number;
+    Medium: number;
+    Low: number;
+  };
+  by_queue: {
+    Emergency: number;
+    General: number;
+  };
+  by_department?: Record<string, number>;
+  avg_wait_time_minutes: number | null;
+  longest_wait_minutes: number | null;
+  patients_completed: number;
+  patients_still_waiting: number;
+  stale_alert_count: number;
+}
+
 export interface ShiftReportData {
   total_patients: number;
   critical_count: number;
@@ -93,17 +115,32 @@ export interface ShiftReportData {
     name: string; // Department name
     count: number;
   }[];
+  raw?: RawShiftReport;
+}
+
+export interface BusinessOverrideItem {
+  flag: string;
+  explanation: string;
+}
+
+export interface RuleBreakdownItem {
+  rule_id?: string;
+  label?: string;
+  rule_name?: string;
+  score_modifier?: number;
+  points?: number;
 }
 
 export interface ExplanationData {
   visit_id: number;
   risk_score: number;
   priority_level: string;
-  rule_breakdown: Record<string, number>;
+  rule_breakdown: Record<string, number> | RuleBreakdownItem[];
   contributing_factors: string[];
-  business_overrides: Record<string, string>;
+  business_overrides: Record<string, string> | BusinessOverrideItem[];
   twin_alert_reasons: string[];
-  rl_threshold_at_assessment: Record<string, [number, number]>;
+  rl_threshold_at_assessment?: Record<string, [number, number]>;
+  rl_threshold_at_time?: Record<string, [number, number]>;
 }
 
 export interface RLState {
