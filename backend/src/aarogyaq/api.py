@@ -31,11 +31,29 @@ app = FastAPI(title="AarogyaQ API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://aayush.qzz.io",
+        "http://aayush.qzz.io",
+    ],
+    allow_origin_regex=r"https://.*\.vercel\.app|https://.*\.qzz\.io",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/")
+async def root():
+    return {
+        "name": "AarogyaQ Clinical Decision Support API",
+        "status": "online",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "health": "/health"
+    }
 
 @app.on_event("startup")
 async def startup_event():
