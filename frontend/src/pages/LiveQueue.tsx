@@ -90,7 +90,7 @@ export const LiveQueue: React.FC = () => {
       if (sortBy === "pain") {
         return b.visit.pain_level - a.visit.pain_level;
       }
-      
+
       // Default: Wait Time (oldest registration date = longest wait = first priority)
       const aTime = a.visit.registered_at ? new Date(a.visit.registered_at).getTime() : 0;
       const bTime = b.visit.registered_at ? new Date(b.visit.registered_at).getTime() : 0;
@@ -186,9 +186,8 @@ export const LiveQueue: React.FC = () => {
               <button
                 key={p}
                 onClick={() => setPriorityFilter(p)}
-                className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded-lg border transition-all cursor-pointer ${
-                  isActive ? `${activeColor} border` : "bg-transparent border-transparent text-slate-500 hover:text-slate-300"
-                }`}
+                className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded-lg border transition-all cursor-pointer ${isActive ? `${activeColor} border` : "bg-transparent border-transparent text-slate-500 hover:text-slate-300"
+                  }`}
               >
                 {p}
               </button>

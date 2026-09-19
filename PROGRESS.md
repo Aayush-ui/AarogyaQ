@@ -8,7 +8,7 @@
 ## Overall Completion
 
 `
-████████████████████████████████████░░░░  90%  [90 / 100 points]
+████████████████████████████████████████  100%  [100 / 100 points] 🎉 COMPLETE
 `
 
 ---
@@ -111,15 +111,15 @@
 
 ### ⚫ Smart ED & Operational Intelligence
 `
-████████████████████████████░░░░░░░░░░░░  70%
+████████████████████████████████████████  100%  COMPLETE
 `
 - [x] Department routing (8 departments)
 - [x] Department capacity management (Available / Busy / Full)
 - [x] SLA-based stale patient detection (/queue/stale)
 - [x] Shift report (/shift/report)
 - [x] CORS configured for frontend integration
-- [ ] R-SED-01 — Real-time SSE / WebSocket push for live queue
-- [ ] R-SED-02 — Throughput analytics charts in AdminDashboard
+- [x] R-SED-01 — Real-time SSE push for live queue (`GET /queue/stream` + EventSource in LiveQueue)
+- [x] R-SED-02 — Throughput analytics charts in AdminDashboard (priority donut, queue split bar, KPI cards)
 
 ---
 
@@ -152,8 +152,8 @@
 | R-RL-03 | Document bandit constraint | ✅ Done | 2026-09-20 |
 | R-RL-04 | Q-value / epsilon decay chart | ✅ Done | 2026-09-20 |
 | R-RL-05 | Wire RL thresholds into triage | ✅ Done | 2026-07-27 |
-| R-SED-01 | SSE / WebSocket live queue | ⬜ Pending | — |
-| R-SED-02 | Throughput analytics charts | ⬜ Pending | — |
+| R-SED-01 | SSE live queue push (`GET /queue/stream`) | ✅ Done | 2026-09-20 |
+| R-SED-02 | Throughput analytics charts in AdminDashboard | ✅ Done | 2026-09-20 |
 | R-SED-03 | AI toggle in NurseIntake form | ✅ Done | 2026-07-27 |
 | R-SED-04 | Role-based login enforcement | ✅ Done | 2026-07-27 |
 | R-SEC-01 | Backend JWT auth + route protection | ✅ Done | 2026-09-20 |
@@ -167,4 +167,4 @@
 - Total tracked change IDs: **20** (18 original + R-SEC-01, R-SEC-02 added 2026-07-27).
 - Scores are re-evaluated after each major task or bulk completion event, or at minimum every 2 days.
 - See [REVISED.md](REVISED.md) for full gap analysis and per-change rationale.
-- Passing test suite confirms backend correctness at each milestone: **161 tests / 0 failures**.
+- Passing test suite confirms backend correctness at each milestone: **164 tests / 0 failures** (161 existing + 3 SSE stream tests).

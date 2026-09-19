@@ -73,15 +73,15 @@ export const AdminDashboard: React.FC = () => {
   const displayHistory = rlHistory.length > 0
     ? rlHistory
     : [
-        { episode: 1, reward: 0.1, epsilon: 0.20 },
-        { episode: 5, reward: 0.35, epsilon: 0.19 },
-        { episode: 10, reward: 0.25, epsilon: 0.18 },
-        { episode: 20, reward: 0.60, epsilon: 0.16 },
-        { episode: 35, reward: 0.75, epsilon: 0.14 },
-        { episode: 50, reward: 0.85, epsilon: 0.12 },
-        { episode: 75, reward: 0.90, epsilon: 0.09 },
-        { episode: 100, reward: 0.95, epsilon: 0.07 },
-      ];
+      { episode: 1, reward: 0.1, epsilon: 0.20 },
+      { episode: 5, reward: 0.35, epsilon: 0.19 },
+      { episode: 10, reward: 0.25, epsilon: 0.18 },
+      { episode: 20, reward: 0.60, epsilon: 0.16 },
+      { episode: 35, reward: 0.75, epsilon: 0.14 },
+      { episode: 50, reward: 0.85, epsilon: 0.12 },
+      { episode: 75, reward: 0.90, epsilon: 0.09 },
+      { episode: 100, reward: 0.95, epsilon: 0.07 },
+    ];
 
   if (isLoading && !rlState) {
     return (

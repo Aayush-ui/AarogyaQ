@@ -1,10 +1,9 @@
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request, Response
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import List, Optional, Any, AsyncGenerator
+from typing import List, Optional, Any
 from sqlalchemy.orm import Session
 from datetime import datetime
-import asyncio
 import logging
 import json
 
@@ -364,70 +363,6 @@ async def get_stale(db: Session = Depends(get_db)):
             "twin":       twin_for_visit(v, latest),
         })
     return res
-
-
-
-# ── R-SED-01: Real-time SSE Live Queue Stream ────────────────────────────────
-
-async def _queue_event_generator(
-    request: Request,
-    db: Session,
-) -> AsyncGenerator[str, None]:
-    """Yield Server-Sent Event frames with the live queue snapshot every 3 s.
-
-    The connection is closed automatically when the client disconnects.
-    """
-    while True:
-        if await request.is_disconnected():
-            break
-
-        try:
-            emergency_visits = get_emergency_queue(db)
-            general_visits = get_general_queue(db)
-
-            def _serialize(visits) -> list:
-                out = []
-                for v in visits:
-                    latest = max(v.assessments, key=lambda a: a.assessment_id) if v.assessments else None
-                    out.append({
-                        "patient":    {"patient_id": v.patient.patient_id, "name": v.patient.name, "age": v.patient.age, "gender": v.patient.gender},
-                        "visit":      visit_to_dict(v),
-                        "assessment": assessment_to_dict(latest) if latest else {},
-                        "summary":    {"summary_text": v.doctor_summary.summary_text} if v.doctor_summary else {},
-                        "twin":       twin_for_visit(v, latest),
-                    })
-                return out
-
-            payload = json.dumps({
-                "emergency": _serialize(emergency_visits),
-                "general":   _serialize(general_visits),
-                "timestamp": datetime.utcnow().isoformat(),
-            }, default=str)
-
-            yield f"data: {payload}\n\n"
-        except Exception as exc:
-            logger.error("SSE queue stream error: %s", exc)
-            yield f"event: error\ndata: {{\"detail\": \"{str(exc)}\"\\\'}}\n\n"
-
-        await asyncio.sleep(3)
-
-
-@router.get("/queue/stream")
-async def queue_stream(request: Request, db: Session = Depends(get_db)):
-    """Real-time Server-Sent Events stream of the live triage queue.
-
-    Emits one SSE frame every 3 seconds containing the full emergency and
-    general queue snapshots.  Connect with ``EventSource`` on the frontend.
-    The stream ends when the client closes the connection.
-    """
-    return StreamingResponse(
-        _queue_event_generator(request, db),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
-    )
 
 
 @router.get("/visits/{visit_id}/twin")
