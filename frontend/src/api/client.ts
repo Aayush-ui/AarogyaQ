@@ -4,6 +4,7 @@
  */
 
 import axios from "axios";
+import { getAuthToken } from "./auth";
 
 export const API_BASE_URL = "http://localhost:8000";
 
@@ -13,6 +14,15 @@ const apiClient = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
+});
+
+// Automatically inject JWT Bearer token into outgoing requests
+apiClient.interceptors.request.use((config) => {
+  const token = getAuthToken();
+  if (token && config.headers) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
 });
 
 export default apiClient;

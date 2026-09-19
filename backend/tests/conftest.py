@@ -78,3 +78,18 @@ def isolate_rl_qtable(tmp_path):
     yield
     rl_agent._QTABLE_PATH = original_path
 
+
+@pytest.fixture(scope="function", autouse=True)
+def override_auth_default():
+    """Default mock auth for all test suites so existing tests pass without explicit login."""
+    from aarogyaq.api import app
+    from aarogyaq.auth import get_current_user
+    app.dependency_overrides[get_current_user] = lambda: {
+        "sub": "doctor",
+        "role": "Doctor",
+        "name": "Dr. Arvind Swamy",
+        "email": "doctor@aarogyaq.gov.in"
+    }
+    yield
+    app.dependency_overrides.pop(get_current_user, None)
+

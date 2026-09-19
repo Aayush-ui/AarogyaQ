@@ -1,14 +1,14 @@
 # AarogyaQ — Project Progress Tracker
 
 > **Topic:** *AarogyaQ: An Explainable AI and Dynamic Patient Prioritization Framework Using Reinforcement Learning for Smart Emergency Departments*
-> **Last Updated:** 2026-09-16
+> **Last Updated:** 2026-09-20
 
 ---
 
 ## Overall Completion
 
 `
-████████████████████████████████░░░░░░░░  80%  [80 / 100 points]
+████████████████████████████████████░░░░  90%  [90 / 100 points]
 `
 
 ---
@@ -44,7 +44,7 @@
 
 ### 🟤 Reinforcement Learning Agent
 `
-████████████████████████████████░░░░░░░░  80%
+████████████████████████████████████████  100%  COMPLETE
 `
 - [x] Q-learning epsilon-greedy contextual bandit (rl_agent.py)
 - [x] State space: (queue_type, time_of_day, queue_depth_bucket)
@@ -53,8 +53,9 @@
 - [x] Q-table persisted in rl_qtable.json
 - [x] REST endpoints: POST /rl/feedback, GET /rl/state, GET /rl/thresholds
 - [x] R-RL-01 — Auto-trigger RL feedback on visit completion
-- [ ] R-RL-02 — GET /rl/history endpoint + reward convergence chart
-- [ ] R-RL-04 — Q-value / epsilon decay visualization in AdminDashboard
+- [x] R-RL-02 — GET /rl/history endpoint + reward convergence chart
+- [x] R-RL-03 — Document contextual bandit constraint & bounded action space
+- [x] R-RL-04 — Q-value / epsilon decay visualization in AdminDashboard
 - [x] R-RL-05 — Wire RL-adjusted thresholds into live triage pipeline
 
 ---
@@ -94,7 +95,7 @@
 
 ### 🔴 Explainability (XAI) — End-to-End
 `
-█████████████████████████████████░░░░░░░  83%
+████████████████████████████████████████  100%  COMPLETE
 `
 - [x] score_breakdown stored per assessment
 - [x] contributing_factors per assessment
@@ -103,7 +104,7 @@
 - [x] R-XAI-01 — Reasoning Panel UI component
 - [x] R-XAI-02 — /explanation API endpoint
 - [x] R-XAI-03 — Confidence score display in frontend
-- [ ] R-XAI-04 — XAI export endpoint
+- [x] R-XAI-04 — XAI export endpoint (`GET /visits/{id}/export`) + Doctor UI download
 - [x] R-XAI-05 — Business flag human-readable descriptions
 
 ---
@@ -124,12 +125,12 @@
 
 ### 🔐 Security — Authentication & Authorization
 `
-░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  0%
+████████████████████████████████████████  100%  COMPLETE
 `
 - [x] Frontend RBAC config (`rbac.ts`) — roles, routes, permissions, sidebar items
 - [x] Zustand `isAuthenticated` + `currentUser` + `activeRole` state
-- [ ] R-SEC-01 — Backend JWT auth (`POST /auth/login`, `get_current_user` dependency, route protection)
-- [ ] R-SEC-02 — Frontend real credential validation, JWT storage in memory, `Authorization: Bearer` header
+- [x] R-SEC-01 — Backend JWT auth (`POST /auth/login`, `get_current_user` dependency, route protection)
+- [x] R-SEC-02 — Frontend real credential validation, JWT storage in memory, `Authorization: Bearer` header
 
 ---
 
@@ -140,23 +141,23 @@
 | R-XAI-01 | Reasoning Panel in DoctorDashboard | ✅ Done | 2026-07-27 |
 | R-XAI-02 | /visits/{id}/explanation endpoint | ✅ Done | 2026-07-27 |
 | R-XAI-03 | AI confidence display in NurseIntake | ✅ Done | 2026-07-27 |
-| R-XAI-04 | XAI export endpoint | ⬜ Pending | — |
+| R-XAI-04 | XAI export endpoint | ✅ Done | 2026-09-20 |
 | R-XAI-05 | Business flag human descriptions | ✅ Done | 2026-07-27 |
 | R-DYN-01 | Queue re-sort by twin_priority | ✅ Done | 2026-07-27 |
 | R-DYN-02 | Auto-reassessment trigger endpoint | ✅ Done | 2026-07-27 |
 | R-DYN-03 | Deterioration urgency UI cues | ✅ Done | 2026-07-27 |
 | R-DYN-04 | Mid-visit vitals patch endpoint | ✅ Done | 2026-09-16 |
 | R-RL-01 | Auto RL feedback on completion | ✅ Done | 2026-07-27 |
-| R-RL-02 | /rl/history + reward chart | ⬜ Pending | — |
-| R-RL-03 | Document bandit constraint | ⬜ Pending | — |
-| R-RL-04 | Q-value / epsilon decay chart | ⬜ Pending | — |
+| R-RL-02 | /rl/history + reward chart | ✅ Done | 2026-09-20 |
+| R-RL-03 | Document bandit constraint | ✅ Done | 2026-09-20 |
+| R-RL-04 | Q-value / epsilon decay chart | ✅ Done | 2026-09-20 |
 | R-RL-05 | Wire RL thresholds into triage | ✅ Done | 2026-07-27 |
 | R-SED-01 | SSE / WebSocket live queue | ⬜ Pending | — |
 | R-SED-02 | Throughput analytics charts | ⬜ Pending | — |
 | R-SED-03 | AI toggle in NurseIntake form | ✅ Done | 2026-07-27 |
 | R-SED-04 | Role-based login enforcement | ✅ Done | 2026-07-27 |
-| R-SEC-01 | Backend JWT auth + route protection | ⬜ Pending | — |
-| R-SEC-02 | Frontend real credential validation + JWT flow | ⬜ Pending | — |
+| R-SEC-01 | Backend JWT auth + route protection | ✅ Done | 2026-09-20 |
+| R-SEC-02 | Frontend real credential validation + JWT flow | ✅ Done | 2026-09-20 |
 
 ---
 
@@ -166,4 +167,4 @@
 - Total tracked change IDs: **20** (18 original + R-SEC-01, R-SEC-02 added 2026-07-27).
 - Scores are re-evaluated after each major task or bulk completion event, or at minimum every 2 days.
 - See [REVISED.md](REVISED.md) for full gap analysis and per-change rationale.
-- Passing test suite confirms backend correctness at each milestone: **153 tests / 0 failures**.
+- Passing test suite confirms backend correctness at each milestone: **161 tests / 0 failures**.

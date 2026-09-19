@@ -80,6 +80,7 @@ class RLAgentState:
         "Emergency": 0,
         "General":   0,
     })
+    reward_history:    list[dict]       = field(default_factory=list)
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -103,6 +104,7 @@ def load_agent() -> RLAgentState:
             episodes=int(data.get("episodes", 0)),
             qtable=data.get("qtable", {}),
             threshold_offsets=data.get("threshold_offsets", {"Emergency": 0, "General": 0}),
+            reward_history=data.get("reward_history", []),
         )
         return state
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
@@ -248,6 +250,17 @@ def update_qtable(
 
     # Decay epsilon — explore less as we accumulate experience
     state.epsilon = max(MIN_EPSILON, state.epsilon * 0.999)
+
+    # Append to reward history (capped at 500 records)
+    state.reward_history.append({
+        "episode": state.episodes,
+        "reward": round(reward, 4),
+        "epsilon": round(state.epsilon, 4),
+        "action": ACTIONS[action_idx],
+        "state_key": state_key,
+    })
+    if len(state.reward_history) > 500:
+        state.reward_history = state.reward_history[-500:]
 
     return state
 

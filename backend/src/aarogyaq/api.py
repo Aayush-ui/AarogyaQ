@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional, Any
@@ -17,6 +17,10 @@ from aarogyaq.rl_agent import (
     load_agent, save_agent, make_state_key, select_action,
     compute_reward, update_qtable, apply_threshold_offset,
     get_adjusted_thresholds, ACTIONS,
+)
+from aarogyaq.auth import (
+    LoginRequest, LoginResponse, authenticate_user,
+    create_access_token, get_current_user
 )
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -230,8 +234,47 @@ def twin_for_visit(v: Visit, assessment) -> dict | None:
         return None
 
 # Routes
+
+# ── Authentication Endpoints ──────────────────────────────────────────────────
+
+@router.post("/auth/login", response_model=LoginResponse)
+async def login_endpoint(data: LoginRequest):
+    """Authenticate clinician and issue signed HS256 JWT access token."""
+    user = authenticate_user(data.username, data.password, data.role)
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid credentials or unauthorized role selection.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = create_access_token({
+        "sub": user["username"],
+        "role": user["role"],
+        "name": user["name"],
+        "email": user["email"],
+    })
+    return LoginResponse(
+        access_token=token,
+        token_type="bearer",
+        username=user["username"],
+        role=user["role"],
+        name=user["name"],
+        email=user["email"],
+    )
+
+@router.post("/auth/logout")
+async def logout_endpoint():
+    """Client-side token invalidation confirmation."""
+    return {"status": "success", "detail": "Logged out successfully"}
+
+@router.get("/auth/me")
+async def me_endpoint(current_user: dict = Depends(get_current_user)):
+    """Return claims for currently authenticated clinician."""
+    return current_user
+
+
 @router.post("/patients/register", status_code=201)
-async def register(data: RegisterRequest, db: Session = Depends(get_db)):
+async def register(data: RegisterRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     vitals_data = data.vitals.model_dump() if data.vitals else None
     p, v = register_patient(
         db,
@@ -393,8 +436,74 @@ async def get_visit_explanation(visit_id: int, db: Session = Depends(get_db)):
         rl_threshold_at_time=rl_threshold_at_time
     )
 
+@router.get("/visits/{visit_id}/export")
+async def export_visit_xai(visit_id: int, db: Session = Depends(get_db)):
+    """Export complete XAI triage dossier and patient clinical state as a downloadable JSON document."""
+    visit = db.get(Visit, visit_id)
+    if not visit:
+        raise HTTPException(status_code=404, detail=f"Visit {visit_id} not found")
+
+    if not visit.assessments:
+        raise HTTPException(status_code=422, detail=f"No assessments found for visit {visit_id}")
+
+    latest_assessment = max(visit.assessments, key=lambda a: a.assessment_id)
+    rule_breakdown = json.loads(latest_assessment.score_breakdown) if latest_assessment.score_breakdown else []
+    
+    from aarogyaq.summary_gen import BUSINESS_FLAG_EXPLANATIONS
+    business_flags = json.loads(latest_assessment.business_rule_flags) if latest_assessment.business_rule_flags else []
+    business_overrides = []
+    for flag in business_flags:
+        explanation = BUSINESS_FLAG_EXPLANATIONS.get(flag, f"Override logic triggered for flag: {flag}")
+        business_overrides.append({"flag": flag, "explanation": explanation})
+
+    twin = twin_for_visit(visit, latest_assessment)
+    twin_alert_reasons = twin.get("alert_reasons", []) if twin else []
+
+    agent = load_agent()
+    raw_thresholds = get_adjusted_thresholds(visit.queue_type, agent)
+    rl_threshold_at_time = {k: [v[0], v[1]] for k, v in raw_thresholds.items()}
+
+    export_payload = {
+        "export_metadata": {
+            "system": "AarogyaQ CDSS & Dynamic Triage",
+            "version": "1.0.0",
+            "exported_at": datetime.utcnow().isoformat(),
+            "standard": "Explainable AI (XAI) Clinical Audit Dossier",
+        },
+        "patient": {
+            "patient_id": visit.patient.patient_id,
+            "name": visit.patient.name,
+            "age": visit.patient.age,
+            "gender": visit.patient.gender,
+            "phone": visit.patient.phone,
+        },
+        "visit": visit_to_dict(visit),
+        "assessment": assessment_to_dict(latest_assessment),
+        "doctor_summary": visit.doctor_summary.summary_text if visit.doctor_summary else "",
+        "digital_twin": twin,
+        "xai_explanation": {
+            "risk_score": latest_assessment.risk_score,
+            "priority_level": latest_assessment.priority_level,
+            "rule_breakdown": rule_breakdown,
+            "business_overrides": business_overrides,
+            "twin_alert_reasons": twin_alert_reasons,
+            "rl_threshold_at_time": rl_threshold_at_time,
+        }
+    }
+
+    content = json.dumps(export_payload, indent=2, default=str)
+    filename = f"aarogyaq_xai_visit_{visit_id}_{visit.patient.patient_id}.json"
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+    )
+
 @router.patch("/visits/{visit_id}/status", response_model=VisitOut)
-async def patch_visit_status(visit_id: int, data: VisitStatusPatch, db: Session = Depends(get_db)):
+async def patch_visit_status(visit_id: int, data: VisitStatusPatch, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     try:
         updated = update_visit_status(db, visit_id, data.status, data.actor)
         return visit_to_dict(updated)
@@ -404,7 +513,7 @@ async def patch_visit_status(visit_id: int, data: VisitStatusPatch, db: Session 
         raise HTTPException(status_code=422, detail=str(e))
 
 @router.post("/visits/{visit_id}/notes", status_code=201)
-async def add_clinical_note(visit_id: int, data: ClinicalNoteRequest, db: Session = Depends(get_db)):
+async def add_clinical_note(visit_id: int, data: ClinicalNoteRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     visit = db.get(Visit, visit_id)
     if not visit:
         raise HTTPException(status_code=422, detail="Visit not found")
@@ -414,7 +523,7 @@ async def add_clinical_note(visit_id: int, data: ClinicalNoteRequest, db: Sessio
     return {"status": "success"}
 
 @router.post("/visits/{visit_id}/medications", status_code=201)
-async def add_medication_order(visit_id: int, data: MedicationOrderRequest, db: Session = Depends(get_db)):
+async def add_medication_order(visit_id: int, data: MedicationOrderRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     visit = db.get(Visit, visit_id)
     if not visit:
         raise HTTPException(status_code=422, detail="Visit not found")
@@ -424,7 +533,7 @@ async def add_medication_order(visit_id: int, data: MedicationOrderRequest, db: 
     return {"status": "success"}
 
 @router.post("/visits/{visit_id}/labs", status_code=201)
-async def add_lab_order(visit_id: int, data: LabOrderRequest, db: Session = Depends(get_db)):
+async def add_lab_order(visit_id: int, data: LabOrderRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     visit = db.get(Visit, visit_id)
     if not visit:
         raise HTTPException(status_code=422, detail="Visit not found")
@@ -434,7 +543,7 @@ async def add_lab_order(visit_id: int, data: LabOrderRequest, db: Session = Depe
     return {"status": "success"}
 
 @router.post("/visits/{visit_id}/radiology", status_code=201)
-async def add_radiology_order(visit_id: int, data: RadiologyOrderRequest, db: Session = Depends(get_db)):
+async def add_radiology_order(visit_id: int, data: RadiologyOrderRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     visit = db.get(Visit, visit_id)
     if not visit:
         raise HTTPException(status_code=422, detail="Visit not found")
@@ -444,7 +553,7 @@ async def add_radiology_order(visit_id: int, data: RadiologyOrderRequest, db: Se
     return {"status": "success"}
 
 @router.patch("/visits/{visit_id}/bed")
-async def assign_bed(visit_id: int, data: BedAssignmentPatch, db: Session = Depends(get_db)):
+async def assign_bed(visit_id: int, data: BedAssignmentPatch, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     visit = db.get(Visit, visit_id)
     if not visit:
         raise HTTPException(status_code=422, detail="Visit not found")
@@ -453,7 +562,7 @@ async def assign_bed(visit_id: int, data: BedAssignmentPatch, db: Session = Depe
     return {"status": "success"}
 
 @router.patch("/visits/{visit_id}/transfer")
-async def transfer_department(visit_id: int, data: DepartmentTransferPatch, db: Session = Depends(get_db)):
+async def transfer_department(visit_id: int, data: DepartmentTransferPatch, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     visit = db.get(Visit, visit_id)
     if not visit:
         raise HTTPException(status_code=422, detail="Visit not found")
@@ -462,14 +571,14 @@ async def transfer_department(visit_id: int, data: DepartmentTransferPatch, db: 
     return {"status": "success"}
 
 @router.post("/visits/{visit_id}/reassess")
-async def reassess(visit_id: int, data: ReassessRequest, db: Session = Depends(get_db)):
+async def reassess(visit_id: int, data: ReassessRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     try:
         return reassess_patient(db, visit_id, data.chief_complaint, data.pain_level, data.use_ai)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
 @router.patch("/visits/{visit_id}/vitals")
-async def patch_visit_vitals(visit_id: int, data: VitalsPayload, db: Session = Depends(get_db)):
+async def patch_visit_vitals(visit_id: int, data: VitalsPayload, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     """Update or record mid-visit physiological vitals and trigger dynamic re-assessment."""
     visit = db.get(Visit, visit_id)
     if not visit:
@@ -595,7 +704,7 @@ async def health():
 # ── Reinforcement Learning endpoints ────────────────────────────────────────
 
 @router.post("/rl/feedback", status_code=200)
-async def rl_feedback(data: RLFeedbackRequest):
+async def rl_feedback(data: RLFeedbackRequest, current_user: dict = Depends(get_current_user)):
     """Record a patient outcome and update the RL agent Q-table.
 
     Called automatically when a visit status is set to Completed, or can
@@ -650,6 +759,17 @@ async def rl_thresholds():
         "Emergency": get_adjusted_thresholds("Emergency", agent),
         "General":   get_adjusted_thresholds("General",   agent),
         "offsets":   agent.threshold_offsets,
+    }
+
+
+@router.get("/rl/history")
+async def rl_history():
+    """Return the sequential reward history and convergence metrics of the RL agent."""
+    agent = load_agent()
+    return {
+        "history": agent.reward_history,
+        "rewards": [entry["reward"] for entry in agent.reward_history],
+        "count": len(agent.reward_history),
     }
 
 

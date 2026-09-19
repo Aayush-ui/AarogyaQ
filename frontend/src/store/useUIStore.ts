@@ -5,6 +5,7 @@
 
 import { create } from "zustand";
 import { UserRole } from "../config/rbac";
+import { loginUser, logoutUser } from "../api/auth";
 
 export interface ToastMessage {
   id: string;
@@ -54,8 +55,8 @@ interface UIState {
   addAuditLog: (action: string) => void;
   triggerERAlert: (type: string, location: string) => void;
   resolveERAlert: (id: string) => void;
-  login: (username: string, role: UserRole) => void;
-  logout: () => void;
+  login: (username: string, password: string, role: UserRole) => Promise<boolean>;
+  logout: () => Promise<void> | void;
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -166,25 +167,32 @@ export const useUIStore = create<UIState>((set, get) => ({
     get().addAuditLog(`Resolved clinical alert (ID: ${id})`);
   },
 
-  login: (username, role) => {
-    const email = `${username.toLowerCase()}@aarogyaq.gov.in`;
-    const nameMap: Record<string, string> = {
-      "Nurse": "Nurse Rahul",
-      "Doctor": "Dr. Arvind Swamy",
-      "Administrator": "SysAdmin"
-    };
-    const name = nameMap[role] || "Clinical Staff";
-    set({
-      isAuthenticated: true,
-      activeRole: role,
-      currentUser: { username, email, name, role }
-    });
-    get().addToast(`Authenticated as ${name} (${role})`, "success");
-    get().addAuditLog(`User ${name} signed in successfully`);
+  login: async (username, password, role) => {
+    try {
+      const auth = await loginUser({ username, password, role });
+      set({
+        isAuthenticated: true,
+        activeRole: auth.role as UserRole,
+        currentUser: {
+          username: auth.username,
+          email: auth.email,
+          name: auth.name,
+          role: auth.role as UserRole,
+        },
+      });
+      get().addToast(`Authenticated as ${auth.name} (${auth.role})`, "success");
+      get().addAuditLog(`Clinician ${auth.name} verified and signed in`);
+      return true;
+    } catch (err: any) {
+      const detail = err.response?.data?.detail || "Authentication failed: invalid clinical credentials or role.";
+      get().addToast(detail, "error");
+      throw err;
+    }
   },
 
-  logout: () => {
+  logout: async () => {
     const user = get().currentUser;
+    await logoutUser();
     set({
       isAuthenticated: false,
       currentUser: null

@@ -15,7 +15,13 @@ export const Login: React.FC = () => {
   const [role, setRole] = useState<UserRole>("Doctor");
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const fillCredentials = (u: string, p: string, r: UserRole) => {
+    setUsername(u);
+    setPassword(p);
+    setRole(r);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!username.trim()) {
@@ -23,19 +29,23 @@ export const Login: React.FC = () => {
       return;
     }
 
+    if (!password.trim()) {
+      addToast("Please enter a password.", "warning");
+      return;
+    }
+
     setIsLoading(true);
 
-    // Brief loading simulation for responsive UX
-    setTimeout(() => {
-      setIsLoading(false);
-      
-      // Perform Zustand store login
-      login(username.trim(), role);
-
+    try {
+      await login(username.trim(), password, role);
       // Perform redirect based on role landing page
       const landing = ROLE_LANDING_PAGES[role] || "#/dashboard";
       window.location.hash = landing;
-    }, 400);
+    } catch (err: any) {
+      // Error toast is handled inside store
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -121,7 +131,10 @@ export const Login: React.FC = () => {
         </form>
 
         <div className="mt-8 text-center text-xs text-[#8492a6]">
-          Demo credentials: <span className="font-mono text-[#e8ecf4]">nurse / nurse123</span> | <span className="font-mono text-[#e8ecf4]">doctor / doctor123</span> | <span className="font-mono text-[#e8ecf4]">admin / admin123</span>
+          <span className="font-semibold block mb-1 text-[#8492a6]">Demo accounts (click to autofill):</span>
+          <button type="button" onClick={() => fillCredentials("nurse", "nurse123", "Nurse")} className="font-mono text-[hsl(220,85%,58%)] hover:underline mx-1">nurse / nurse123</button> | 
+          <button type="button" onClick={() => fillCredentials("doctor", "doctor123", "Doctor")} className="font-mono text-[hsl(220,85%,58%)] hover:underline mx-1">doctor / doctor123</button> | 
+          <button type="button" onClick={() => fillCredentials("admin", "admin123", "Administrator")} className="font-mono text-[hsl(220,85%,58%)] hover:underline mx-1">admin / admin123</button>
         </div>
       </div>
     </div>

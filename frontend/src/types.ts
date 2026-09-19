@@ -123,3 +123,17 @@ export interface RLThresholds {
   Emergency: Record<string, [number, number]>;
   General: Record<string, [number, number]>;
 }
+
+export interface RLHistoryEntry {
+  episode: number;
+  reward: number;
+  epsilon: number;
+  action?: number;
+  state_key?: string;
+}
+
+export interface RLHistoryResponse {
+  history: RLHistoryEntry[];
+  rewards: number[];
+  count: number;
+}

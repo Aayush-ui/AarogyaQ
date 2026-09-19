@@ -4,7 +4,7 @@
  */
 
 import apiClient from "./client";
-import { RLState, RLThresholds } from "../types";
+import { RLState, RLThresholds, RLHistoryResponse } from "../types";
 
 export async function getRLState(): Promise<RLState> {
   const response = await apiClient.get<RLState>("/rl/state");
@@ -16,7 +16,7 @@ export async function getRLThresholds(): Promise<RLThresholds> {
   return response.data;
 }
 
-export async function getRLHistory(): Promise<{ rewards: number[] }> {
-  const response = await apiClient.get<{ rewards: number[] }>("/rl/history");
+export async function getRLHistory(): Promise<RLHistoryResponse> {
+  const response = await apiClient.get<RLHistoryResponse>("/rl/history");
   return response.data;
 }

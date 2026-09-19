@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useState } from "react";
-import { User, Activity, AlertTriangle, ShieldCheck, HeartPulse, RefreshCw, Clock } from "lucide-react";
+import { User, Activity, AlertTriangle, ShieldCheck, HeartPulse, RefreshCw, Clock, Download } from "lucide-react";
 import { useQueueStore } from "../store/useQueueStore";
 import { useUIStore } from "../store/useUIStore";
 import { PageTransition } from "../components/layout/PageTransition";
@@ -12,6 +12,7 @@ import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { TriageQueueItem, ExplanationData } from "../types";
 import { getExplanation } from "../api/explanation";
+import { exportVisitXAI } from "../api/export";
 import { updateVisitStatus, reassessVisit } from "../api/visits";
 import { XAIPanel } from "../components/queue/XAIPanel";
 import { PriorityBadge } from "../components/queue/PriorityBadge";
@@ -214,6 +215,25 @@ export const DoctorDashboard: React.FC = () => {
 
                 {/* Status Command Buttons */}
                 <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={actionLoading || expLoading}
+                    onClick={async () => {
+                      try {
+                        addToast("Downloading clinical XAI audit dossier...", "info");
+                        await exportVisitXAI(selectedItem.visit.visit_id);
+                        addToast("XAI dossier downloaded successfully.", "success");
+                      } catch (err: any) {
+                        addToast(`Export failed: ${err.message || err}`, "error");
+                      }
+                    }}
+                    className="flex items-center gap-1.5"
+                  >
+                    <Download className="h-3.5 w-3.5 text-cyan-400" />
+                    Export Dossier
+                  </Button>
+
                   <Button
                     variant="ghost"
                     size="sm"
