@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: aarogyaq-backend
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -e .
+    startCommand: uvicorn aarogyaq.api:app --host 0.0.0.0 --port $PORT --app-dir src
+    healthCheckPath: /health
+    autoDeploy: true
