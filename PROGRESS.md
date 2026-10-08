@@ -1,7 +1,7 @@
 # AarogyaQ — Project Progress Tracker
 
 > **Topic:** *AarogyaQ: An Explainable AI and Dynamic Patient Prioritization Framework Using Reinforcement Learning for Smart Emergency Departments*
-> **Last Updated:** 2026-09-20
+> **Last Updated:** 2026-10-09
 
 ---
 
